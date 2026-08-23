@@ -43,6 +43,14 @@ final class Router
 
     private function dispatchV1(string $route, RequestContext $request): never
     {
+        if ($route === 'listings') {
+            $this->listings($request, static fn (ListingsEndpoint $endpoint, $partner): array => $endpoint->index($partner, $_GET));
+        }
+
+        if (preg_match('#^listings/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$#', $route, $matches) === 1) {
+            $this->listings($request, static fn (ListingsEndpoint $endpoint, $partner): array => $endpoint->show($partner, $matches[1]));
+        }
+
         switch ($route) {
             case 'health':
                 JsonResponder::send([
@@ -77,6 +85,41 @@ final class Router
             default:
                 JsonResponder::error(ErrorCode::NotFound, 'Unknown federation endpoint.');
         }
+    }
+
+    /**
+     * The signed listing surface: authenticate (verified partners only),
+     * enforce the advertised rate limit (429 + Retry-After, API-9), run
+     * the endpoint, emit.
+     *
+     * @param callable(ListingsEndpoint, \OpenYacht\Federation\Partner): array{payload?: array<string, mixed>, status?: int, error?: \OpenYacht\Federation\ErrorCode, message?: string} $handler
+     */
+    private function listings(RequestContext $request, callable $handler): never
+    {
+        $result = Services::inboundVerification()->authenticate($request);
+
+        if (! $result->verified() || $result->partner === null) {
+            JsonResponder::error($result->error ?? ErrorCode::SignatureInvalid, $result->message);
+        }
+
+        $retryAfter = (new RateLimiter())->hit($result->partner->id);
+
+        if ($retryAfter !== null) {
+            JsonResponder::error(
+                ErrorCode::RateLimited,
+                'Rate limit exceeded.',
+                [],
+                ['Retry-After' => (string) $retryAfter],
+            );
+        }
+
+        $outcome = $handler(Services::listingsEndpoint(), $result->partner);
+
+        if (isset($outcome['error'])) {
+            JsonResponder::error($outcome['error'], $outcome['message'] ?? '');
+        }
+
+        JsonResponder::send($outcome['payload'] ?? [], $outcome['status'] ?? 200);
     }
 
     /**

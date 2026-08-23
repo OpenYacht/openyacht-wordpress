@@ -13,7 +13,7 @@ namespace OpenYacht;
  */
 final class Schema
 {
-    public const VERSION = 1;
+    public const VERSION = 2;
 
     public const OPTION = 'openyacht_schema_version';
 
@@ -116,6 +116,7 @@ final class Schema
   type varchar(16) NOT NULL DEFAULT 'sale',
   status varchar(16) NOT NULL DEFAULT 'draft',
   name varchar(255) NULL,
+  summary text NULL,
   yacht_condition varchar(8) NULL,
   hin varchar(64) NULL,
   imo varchar(16) NULL,
@@ -159,6 +160,7 @@ final class Schema
   kind varchar(16) NOT NULL,
   attachment_id bigint(20) unsigned NULL,
   url text NULL,
+  thumbnail_url text NULL,
   sha256 char(64) NULL,
   width int(10) unsigned NULL,
   height int(10) unsigned NULL,

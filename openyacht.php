@@ -41,6 +41,7 @@ if (! file_exists($openyacht_autoload)) {
 }
 
 require $openyacht_autoload;
+require __DIR__ . '/src/functions.php';
 
 register_activation_hook(__FILE__, [Activation::class, 'activate']);
 register_deactivation_hook(__FILE__, [Deactivation::class, 'deactivate']);

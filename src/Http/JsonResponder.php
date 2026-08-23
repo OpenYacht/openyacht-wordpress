@@ -17,12 +17,17 @@ final class JsonResponder
 {
     /**
      * @param array<string, mixed> $payload
+     * @param array<string, string> $headers
      */
-    public static function send(array $payload, int $status = 200): never
+    public static function send(array $payload, int $status = 200, array $headers = []): never
     {
         nocache_headers();
         status_header($status);
         header('Content-Type: application/json; charset=utf-8');
+
+        foreach ($headers as $name => $value) {
+            header($name . ': ' . $value);
+        }
 
         echo wp_json_encode($payload, JSON_UNESCAPED_SLASHES);
 
@@ -31,8 +36,9 @@ final class JsonResponder
 
     /**
      * @param array<string, mixed> $details
+     * @param array<string, string> $headers
      */
-    public static function error(ErrorCode $code, string $message, array $details = []): never
+    public static function error(ErrorCode $code, string $message, array $details = [], array $headers = []): never
     {
         self::send([
             'error' => [
@@ -44,6 +50,6 @@ final class JsonResponder
                 'request_id' => wp_generate_uuid4(),
                 'time' => gmdate('Y-m-d\TH:i:s\Z'),
             ],
-        ], $code->httpStatus());
+        ], $code->httpStatus(), $headers);
     }
 }

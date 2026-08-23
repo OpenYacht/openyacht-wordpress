@@ -69,6 +69,7 @@ final class Plugin
             \WP_CLI::add_command('openyacht partner', Cli\PartnerCommand::class);
             \WP_CLI::add_command('openyacht key', Cli\KeyCommand::class);
             \WP_CLI::add_command('openyacht media', Cli\MediaCommand::class);
+            \WP_CLI::add_command('openyacht seed', Cli\SeedCommand::class);
         }
 
         if (is_admin()) {

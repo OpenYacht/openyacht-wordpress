@@ -56,6 +56,37 @@ final class Partner
     }
 
     /**
+     * The field groups granted to this partner (LS-14). A null column
+     * means every group is granted; an explicit array restricts to those
+     * groups.
+     *
+     * @return list<FieldGroup>
+     */
+    public function grantedFieldGroups(): array
+    {
+        if ($this->fieldGroups === null) {
+            return FieldGroup::cases();
+        }
+
+        $groups = [];
+
+        foreach ($this->fieldGroups as $value) {
+            $group = FieldGroup::tryFrom((string) $value);
+
+            if ($group !== null) {
+                $groups[] = $group;
+            }
+        }
+
+        return $groups;
+    }
+
+    public function hasFieldGroup(FieldGroup $group): bool
+    {
+        return in_array($group, $this->grantedFieldGroups(), true);
+    }
+
+    /**
      * A partner unreachable beyond the staleness threshold marks all its
      * copies stale in any consuming UI (FP-15).
      *
