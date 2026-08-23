@@ -36,6 +36,7 @@ final class SyncedListingsTable extends \WP_List_Table
     public function get_columns(): array
     {
         return [
+            'cb' => '<input type="checkbox" />',
             'thumb' => '',
             'name' => __('Listing', 'openyacht'),
             'partner' => __('Partner', 'openyacht'),
@@ -46,6 +47,14 @@ final class SyncedListingsTable extends \WP_List_Table
         ];
     }
 
+    /**
+     * @param ListingCopy $item
+     */
+    public function column_cb($item): string
+    {
+        return sprintf('<input type="checkbox" name="copy_ids[]" value="%d" aria-label="%s">', $item->id, esc_attr($item->name ?? ''));
+    }
+
     public function prepare_items(): void
     {
         foreach (Services::partners()->all() as $partner) {
@@ -54,11 +63,29 @@ final class SyncedListingsTable extends \WP_List_Table
 
         $copies = Services::copies()->active();
         $partnerFilter = isset($_GET['partner']) ? (int) $_GET['partner'] : 0;
+        $importFilter = isset($_GET['imported']) ? sanitize_key(wp_unslash($_GET['imported'])) : '';
+        $search = isset($_GET['s']) ? strtolower(sanitize_text_field(wp_unslash($_GET['s']))) : '';
 
         if ($partnerFilter > 0) {
-            $copies = array_values(array_filter($copies, static fn (ListingCopy $copy): bool => $copy->partnerId === $partnerFilter));
+            $copies = array_filter($copies, static fn (ListingCopy $copy): bool => $copy->partnerId === $partnerFilter);
         }
 
+        if ($importFilter === 'yes') {
+            $copies = array_filter($copies, static fn (ListingCopy $copy): bool => $copy->isSelected());
+        } elseif ($importFilter === 'no') {
+            $copies = array_filter($copies, static fn (ListingCopy $copy): bool => ! $copy->isSelected());
+        }
+
+        if ($search !== '') {
+            $copies = array_filter($copies, static function (ListingCopy $copy) use ($search): bool {
+                $builder = (string) ($copy->payload['vessel']['builder']['name'] ?? '');
+
+                return str_contains(strtolower((string) $copy->name), $search)
+                    || str_contains(strtolower($builder), $search);
+            });
+        }
+
+        $copies = array_values($copies);
         $perPage = 30;
         $page = max(1, $this->get_pagenum());
         $this->items = array_slice($copies, ($page - 1) * $perPage, $perPage);
@@ -184,19 +211,15 @@ final class SyncedListingsTable extends \WP_List_Table
 
     private function actionButton(ListingCopy $copy, string $op, string $label): string
     {
-        $form = '<form method="post" action="%s" style="display:inline">'
-            . '<input type="hidden" name="action" value="openyacht_copy_action">'
-            . '<input type="hidden" name="op" value="%s">'
-            . '<input type="hidden" name="copy_id" value="%d">'
-            . '%s<button type="submit" class="button-link">%s</button></form>';
-
-        return sprintf(
-            $form,
-            esc_url(admin_url('admin-post.php')),
-            esc_attr($op),
-            $copy->id,
-            wp_nonce_field('openyacht_copy_action', '_wpnonce', true, false),
-            esc_html($label),
+        // Links, not forms: rows sit inside the bulk-action form.
+        $url = wp_nonce_url(
+            add_query_arg(
+                ['action' => 'openyacht_copy_action', 'op' => $op, 'copy_id' => $copy->id],
+                admin_url('admin-post.php'),
+            ),
+            'openyacht_copy_action',
         );
+
+        return '<a href="' . esc_url($url) . '">' . esc_html($label) . '</a>';
     }
 }

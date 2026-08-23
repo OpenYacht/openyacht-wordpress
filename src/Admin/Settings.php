@@ -60,7 +60,7 @@ final class Settings
                 'section' => 'media',
                 'default' => 'local',
                 'options' => $driverOptions,
-                'description' => __('Where cached partner media is stored. Additional drivers (S3, R2) register here when their plugin is active.', 'openyacht'),
+                'description' => __('Where cached partner images are stored. Currently this site\'s uploads folder; cloud options (S3, R2) will appear here once a storage add-on plugin is installed.', 'openyacht'),
             ],
             'delete_data_on_uninstall' => [
                 'label' => __('Delete all data on uninstall', 'openyacht'),

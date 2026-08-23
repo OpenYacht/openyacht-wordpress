@@ -46,17 +46,47 @@ final class SyncedListingsPage
 
         check_admin_referer('openyacht_copy_action');
 
-        $op = isset($_POST['op']) ? sanitize_key(wp_unslash($_POST['op'])) : '';
-        $copy = Services::copies()->find(isset($_POST['copy_id']) ? (int) $_POST['copy_id'] : 0);
+        // Row links arrive via GET; the bulk form posts.
+        $request = array_merge($_GET, $_POST);
+        $op = isset($request['op']) ? sanitize_key(wp_unslash($request['op'])) : '';
 
-        if ($copy === null || ! in_array($op, ['select', 'deselect'], true)) {
+        if (! in_array($op, ['select', 'deselect'], true)) {
             $this->redirect(['openyacht_notice' => 'missing']);
         }
 
-        Services::copies()->setSelected($copy->id, $op === 'select');
+        $ids = isset($request['copy_ids']) && is_array($request['copy_ids'])
+            ? array_map('intval', $request['copy_ids'])
+            : array_filter([isset($request['copy_id']) ? (int) $request['copy_id'] : 0]);
+        $applied = 0;
+
+        foreach ($ids as $id) {
+            if ($this->apply($id, $op === 'select')) {
+                $applied++;
+            }
+        }
+
+        if ($applied === 0) {
+            $this->redirect(['openyacht_notice' => 'missing']);
+        }
+
+        $this->redirect([
+            'openyacht_notice' => $op === 'select' ? 'selected' : 'deselected',
+            'openyacht_count' => $applied,
+        ]);
+    }
+
+    private function apply(int $copyId, bool $select): bool
+    {
+        $copy = Services::copies()->find($copyId);
+
+        if ($copy === null) {
+            return false;
+        }
+
+        Services::copies()->setSelected($copy->id, $select);
         $fresh = Services::copies()->find($copy->id) ?? $copy;
 
-        if ($op === 'select') {
+        if ($select) {
             // Cache its media in the background.
             if (! wp_next_scheduled('openyacht_fetch_copy_media', [$copy->id])) {
                 wp_schedule_single_event(time() + 5, 'openyacht_fetch_copy_media', [$copy->id]);
@@ -65,7 +95,7 @@ final class SyncedListingsPage
             Services::mediaService()->expire($fresh);
         }
 
-        $this->redirect(['openyacht_notice' => $op === 'select' ? 'selected' : 'deselected']);
+        return true;
     }
 
     public function notices(): void
@@ -74,9 +104,18 @@ final class SyncedListingsPage
             return;
         }
 
+        $count = isset($_GET['openyacht_count']) ? max(1, (int) $_GET['openyacht_count']) : 1;
         $messages = [
-            'selected' => __('Listing marked for import — its media is being cached in the background.', 'openyacht'),
-            'deselected' => __('Listing removed from import; its cached media has been deleted.', 'openyacht'),
+            'selected' => sprintf(
+                /* translators: %d: number of listings. */
+                _n('%d listing imported — its images are being cached in the background.', '%d listings imported — their images are being cached in the background.', $count, 'openyacht'),
+                $count,
+            ),
+            'deselected' => sprintf(
+                /* translators: %d: number of listings. */
+                _n('%d listing removed from import; its cached images were deleted.', '%d listings removed from import; their cached images were deleted.', $count, 'openyacht'),
+                $count,
+            ),
             'missing' => __('That synced listing no longer exists.', 'openyacht'),
         ];
         $notice = sanitize_key(wp_unslash($_GET['openyacht_notice']));
@@ -105,35 +144,57 @@ final class SyncedListingsPage
         }
 
         echo '<h1>' . esc_html__('Synced Listings', 'openyacht') . '</h1>';
-        echo '<p class="description">' . esc_html__('All partner listings sync as data automatically. Mark the ones you want to import — only those get their images cached locally; the rest preview via the partner\'s own thumbnails.', 'openyacht') . '</p>';
-        $this->renderPartnerFilter();
+        echo '<p class="description">' . esc_html__('All partner listings sync as data automatically. Import the ones you want on this site — importing caches the images locally and hands the listing to your display layer; everything else previews via the partner\'s own thumbnails.', 'openyacht') . '</p>';
+        $this->renderFilters();
 
         $table = new SyncedListingsTable();
         $table->prepare_items();
+
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+        echo '<input type="hidden" name="action" value="openyacht_copy_action">';
+        wp_nonce_field('openyacht_copy_action');
+        echo '<div class="tablenav top"><div class="alignleft actions bulkactions">';
+        echo '<select name="op"><option value="select">' . esc_html__('Import', 'openyacht') . '</option><option value="deselect">' . esc_html__('Remove from import', 'openyacht') . '</option></select> ';
+        submit_button(__('Apply', 'openyacht'), 'action', '', false);
+        echo '</div></div>';
         $table->display();
+        echo '</form>';
         echo '</div>';
     }
 
-    private function renderPartnerFilter(): void
+    private function renderFilters(): void
     {
-        $current = isset($_GET['partner']) ? (int) $_GET['partner'] : 0;
+        $currentPartner = isset($_GET['partner']) ? (int) $_GET['partner'] : 0;
+        $currentImported = isset($_GET['imported']) ? sanitize_key(wp_unslash($_GET['imported'])) : '';
+        $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
 
-        echo '<form method="get" style="margin:8px 0;">';
+        echo '<form method="get" style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
         echo '<input type="hidden" name="page" value="' . esc_attr(self::MENU_SLUG) . '">';
-        echo '<select name="partner" onchange="this.form.submit()">';
-        echo '<option value="0">' . esc_html__('All partners', 'openyacht') . '</option>';
+
+        echo '<select name="partner"><option value="0">' . esc_html__('All partners', 'openyacht') . '</option>';
 
         foreach (Services::partners()->all() as $partner) {
             printf(
                 '<option value="%d" %s>%s (%d)</option>',
                 $partner->id,
-                selected($current, $partner->id, false),
+                selected($currentPartner, $partner->id, false),
                 esc_html($partner->domain),
                 Services::copies()->countForPartner($partner->id),
             );
         }
 
-        echo '</select></form>';
+        echo '</select>';
+
+        echo '<select name="imported">';
+
+        foreach (['' => __('Imported and not', 'openyacht'), 'yes' => __('Imported only', 'openyacht'), 'no' => __('Not imported', 'openyacht')] as $value => $label) {
+            printf('<option value="%s" %s>%s</option>', esc_attr((string) $value), selected($currentImported, (string) $value, false), esc_html($label));
+        }
+
+        echo '</select>';
+        echo '<input type="search" name="s" placeholder="' . esc_attr__('Search name or builder…', 'openyacht') . '" value="' . esc_attr($search) . '">';
+        submit_button(__('Filter', 'openyacht'), '', '', false);
+        echo '</form>';
     }
 
     private function renderPreview(?ListingCopy $copy): void
@@ -197,9 +258,51 @@ final class SyncedListingsPage
             echo '<p style="max-width:760px;">' . esc_html($summary) . '</p>';
         }
 
+        $this->renderCachedImages($copy);
+
         echo '<p style="margin-top:12px;">';
         $this->renderToggle($copy);
         echo '</p>';
+        echo '<p class="description" style="max-width:760px;">' . esc_html__('Importing caches every image locally (refreshed on partner updates, deleted on tombstones) and exposes the listing to your site\'s display layer via the OpenYacht read API. Removing it deletes the cached images again.', 'openyacht') . '</p>';
+    }
+
+    private function renderCachedImages(ListingCopy $copy): void
+    {
+        if (! $copy->isSelected()) {
+            return;
+        }
+
+        $items = Data::media($copy);
+
+        echo '<h2 style="margin-top:20px;">' . esc_html(sprintf(
+            /* translators: %d: number of cached images. */
+            __('Cached images (%d)', 'openyacht'),
+            count($items),
+        )) . '</h2>';
+
+        if ($items === []) {
+            echo '<p class="description">' . esc_html__('Images are being cached in the background — check back in a minute, or run "wp openyacht media sync".', 'openyacht') . '</p>';
+
+            return;
+        }
+
+        echo '<div style="display:flex;flex-wrap:wrap;gap:8px;max-width:960px;">';
+
+        foreach ($items as $item) {
+            $rendition = $item['renditions']['w480'] ?? (reset($item['renditions']) ?: null);
+
+            if ($rendition === null) {
+                continue;
+            }
+
+            printf(
+                '<img src="%s" style="width:150px;height:100px;object-fit:cover;border-radius:4px;border:1px solid #c3c4c7;" loading="lazy" alt="%s">',
+                esc_url($rendition['url']),
+                esc_attr($item['caption'] ?? ''),
+            );
+        }
+
+        echo '</div>';
     }
 
     private function renderToggle(ListingCopy $copy): void
