@@ -17,7 +17,10 @@ final class Settings
 
     public function register(): void
     {
-        add_action('admin_menu', [$this, 'addPage']);
+        // After PartnersPage's default-priority admin_menu callback: the
+        // parent menu must exist before this submenu attaches to it, or WP
+        // cannot map the page to a capability ("not allowed to access").
+        add_action('admin_menu', [$this, 'addPage'], 20);
         add_action('admin_init', [$this, 'registerSettings']);
     }
 
