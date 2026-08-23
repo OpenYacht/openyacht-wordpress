@@ -29,6 +29,13 @@ final class Activation
         (new Schema($wpdb))->install();
         NodeIdentity::ensure();
 
+        // Node keypair, generated once at installation (FP-5 pairs the UUID
+        // above with FP-3's Ed25519 key). Existing keys are left untouched.
+        $keys = new Federation\KeyManager(
+            new Federation\WpdbKeyRepository($wpdb, Federation\KeyEncryption::fromWpSalts()),
+        );
+        $keys->ensureActiveKey();
+
         // No plugin option is ever autoloaded. The settings option is
         // pre-created here so its first save through options.php inherits
         // autoload=off instead of the add_option default.

@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace OpenYacht;
 
 use OpenYacht\Admin\Settings;
+use OpenYacht\Federation\KeyEncryption;
+use OpenYacht\Federation\KeyManager;
+use OpenYacht\Federation\WellKnownDocument;
+use OpenYacht\Federation\WpdbKeyRepository;
+use OpenYacht\Http\Router;
 
 final class Plugin
 {
@@ -31,6 +36,9 @@ final class Plugin
         add_action('init', static function (): void {
             load_plugin_textdomain('openyacht', false, dirname(plugin_basename(OPENYACHT_FILE)) . '/languages');
         });
+
+        $keys = new KeyManager(new WpdbKeyRepository($wpdb, KeyEncryption::fromWpSalts()));
+        (new Router(new WellKnownDocument($keys)))->register();
 
         if (is_admin()) {
             (new Settings())->register();

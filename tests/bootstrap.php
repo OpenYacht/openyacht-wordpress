@@ -14,3 +14,7 @@ if (! class_exists('wpdb')) {
 if (! defined('ABSPATH')) {
     define('ABSPATH', __DIR__ . '/Support/');
 }
+
+if (! defined('OPENYACHT_VERSION')) {
+    define('OPENYACHT_VERSION', '0.0.0-test');
+}
