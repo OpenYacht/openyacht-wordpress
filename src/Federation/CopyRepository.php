@@ -6,6 +6,17 @@ namespace OpenYacht\Federation;
 
 interface CopyRepository
 {
+    public function find(int $id): ?ListingCopy;
+
+    public function findByUri(string $canonicalUri): ?ListingCopy;
+
+    /**
+     * Live (non-tombstoned) copies, newest listing change first.
+     *
+     * @return list<ListingCopy>
+     */
+    public function active(): array;
+
     public function findForPartner(int $partnerId, string $canonicalUri): ?ListingCopy;
 
     /**

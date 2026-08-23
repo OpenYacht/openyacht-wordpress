@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OpenYacht;
 
+use OpenYacht\Federation\CopyMediaRepository;
 use OpenYacht\Federation\CopyRepository;
 use OpenYacht\Federation\InboundVerification;
 use OpenYacht\Federation\KeyEncryption;
@@ -17,10 +18,16 @@ use OpenYacht\Federation\SyncService;
 use OpenYacht\Federation\Verifier;
 use OpenYacht\Federation\WellKnownClient;
 use OpenYacht\Federation\WellKnownDocument;
+use OpenYacht\Federation\WpdbCopyMediaRepository;
 use OpenYacht\Federation\WpdbCopyRepository;
 use OpenYacht\Federation\WpdbKeyRepository;
 use OpenYacht\Federation\WpdbLogger;
 use OpenYacht\Federation\WpdbPartnerRepository;
+use OpenYacht\Media\ImageFetcher;
+use OpenYacht\Media\MediaService;
+use OpenYacht\Media\Storage;
+use OpenYacht\Media\StorageFactory;
+use OpenYacht\Media\WpRenditionGenerator;
 
 /**
  * Composition root: builds the service graph over the live $wpdb once per
@@ -75,6 +82,27 @@ final class Services
     public static function wellKnownDocument(): WellKnownDocument
     {
         return self::$cache[__FUNCTION__] ??= new WellKnownDocument(self::keyManager());
+    }
+
+    public static function copyMedia(): CopyMediaRepository
+    {
+        return self::$cache[__FUNCTION__] ??= new WpdbCopyMediaRepository(self::wpdb());
+    }
+
+    public static function storage(): Storage
+    {
+        return self::$cache[__FUNCTION__] ??= StorageFactory::make();
+    }
+
+    public static function mediaService(): MediaService
+    {
+        return self::$cache[__FUNCTION__] ??= new MediaService(
+            self::storage(),
+            new ImageFetcher(),
+            new WpRenditionGenerator(),
+            self::copyMedia(),
+            self::logger(),
+        );
     }
 
     public static function inboundVerification(): InboundVerification

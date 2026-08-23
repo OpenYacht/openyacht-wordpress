@@ -16,6 +16,30 @@ final class InMemoryCopyRepository implements CopyRepository
 
     private int $nextId = 1;
 
+    public function find(int $id): ?ListingCopy
+    {
+        return $this->copies[$id] ?? null;
+    }
+
+    public function findByUri(string $canonicalUri): ?ListingCopy
+    {
+        foreach ($this->copies as $copy) {
+            if ($copy->canonicalUri === $canonicalUri) {
+                return $copy;
+            }
+        }
+
+        return null;
+    }
+
+    public function active(): array
+    {
+        return array_values(array_filter(
+            $this->copies,
+            static fn (ListingCopy $copy): bool => $copy->tombstonedAt === null,
+        ));
+    }
+
     public function findForPartner(int $partnerId, string $canonicalUri): ?ListingCopy
     {
         foreach ($this->copies as $copy) {

@@ -39,6 +39,27 @@ final class Plugin
             SyncRunner::run();
         });
 
+        // Media fetching is queued in small single events so a sync pass is
+        // never blocked on image downloads; a tombstone purges immediately
+        // (cached media inherits the usage terms, ID-10).
+        $queueMedia = static function (Federation\ListingCopy $copy): void {
+            if (! wp_next_scheduled('openyacht_fetch_copy_media', [$copy->id])) {
+                wp_schedule_single_event(time() + 10, 'openyacht_fetch_copy_media', [$copy->id]);
+            }
+        };
+        add_action('openyacht_copy_created', $queueMedia);
+        add_action('openyacht_copy_updated', $queueMedia);
+        add_action('openyacht_copy_tombstoned', static function (Federation\ListingCopy $copy): void {
+            Services::mediaService()->expire($copy);
+        });
+        add_action('openyacht_fetch_copy_media', static function (int $copyId): void {
+            $copy = Services::copies()->find($copyId);
+
+            if ($copy !== null && $copy->tombstonedAt === null) {
+                Services::mediaService()->sync($copy);
+            }
+        });
+
         if (! wp_next_scheduled(SyncRunner::HOOK)) {
             wp_schedule_event(time(), 'hourly', SyncRunner::HOOK);
         }
@@ -47,6 +68,7 @@ final class Plugin
             \WP_CLI::add_command('openyacht', Cli\RootCommand::class);
             \WP_CLI::add_command('openyacht partner', Cli\PartnerCommand::class);
             \WP_CLI::add_command('openyacht key', Cli\KeyCommand::class);
+            \WP_CLI::add_command('openyacht media', Cli\MediaCommand::class);
         }
 
         if (is_admin()) {

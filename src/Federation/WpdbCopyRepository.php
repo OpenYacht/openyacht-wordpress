@@ -13,6 +13,36 @@ final class WpdbCopyRepository implements CopyRepository
     {
     }
 
+    public function find(int $id): ?ListingCopy
+    {
+        $row = $this->wpdb->get_row(
+            $this->wpdb->prepare("SELECT * FROM {$this->table()} WHERE id = %d", $id),
+            'ARRAY_A',
+        );
+
+        return is_array($row) ? $this->hydrate($row) : null;
+    }
+
+    public function findByUri(string $canonicalUri): ?ListingCopy
+    {
+        $row = $this->wpdb->get_row(
+            $this->wpdb->prepare("SELECT * FROM {$this->table()} WHERE canonical_uri = %s", $canonicalUri),
+            'ARRAY_A',
+        );
+
+        return is_array($row) ? $this->hydrate($row) : null;
+    }
+
+    public function active(): array
+    {
+        $rows = $this->wpdb->get_results(
+            "SELECT * FROM {$this->table()} WHERE tombstoned_at IS NULL ORDER BY listing_updated_at DESC",
+            'ARRAY_A',
+        );
+
+        return array_map($this->hydrate(...), is_array($rows) ? $rows : []);
+    }
+
     public function findForPartner(int $partnerId, string $canonicalUri): ?ListingCopy
     {
         $row = $this->wpdb->get_row(
