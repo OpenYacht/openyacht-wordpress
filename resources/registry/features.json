@@ -2,7 +2,7 @@
 	"registry": "openyacht-features",
 	"version": "2026.08.0",
 	"canonical_url": "https://openyacht.org/registry/features.json",
-	"notes": "DRAFT (proposed 2026-08-23; not yet adopted). Well-known feature slugs for the OpenYacht protocol — the non-normative list listing-schema.md §Features says is maintained alongside the other vocabulary curation material. Seeded from the Worth Avenue intranet's production reference data (amenities + water toys) plus the spec's own named examples. name is free text on the wire; a slug is sent only when the feature matches an entry here. category is the entry's grouping label, not an enum.",
+	"notes": "DRAFT (proposed 2026-08-23; not yet adopted). Well-known feature slugs for the OpenYacht protocol — the non-normative list listing-schema.md §Features says is maintained alongside the other vocabulary curation material. Seeded from the Worth Avenue intranet's production reference data (amenities + water toys) plus the spec's named examples and common systems/deck/entertainment equipment the amenities+toys data does not cover. name is free text on the wire; a slug is sent only when the feature matches an entry here. category is the entry's grouping label, not an enum.",
 	"features": [
 		{
 			"slug": "air-conditioning",
@@ -212,12 +212,132 @@
 		{
 			"slug": "flybridge",
 			"name": "Flybridge",
-			"category": "equipment"
+			"category": "deck-exterior"
 		},
 		{
 			"slug": "water-maker",
 			"name": "Water maker",
-			"category": "equipment"
+			"category": "systems-equipment"
+		},
+		{
+			"slug": "generator",
+			"name": "Generator",
+			"category": "systems-equipment"
+		},
+		{
+			"slug": "inverter",
+			"name": "Inverter",
+			"category": "systems-equipment"
+		},
+		{
+			"slug": "solar-panels",
+			"name": "Solar Panels",
+			"category": "systems-equipment"
+		},
+		{
+			"slug": "shore-power",
+			"name": "Shore Power",
+			"category": "systems-equipment"
+		},
+		{
+			"slug": "underwater-lights",
+			"name": "Underwater Lights",
+			"category": "deck-exterior"
+		},
+		{
+			"slug": "watertight-doors",
+			"name": "Watertight Doors",
+			"category": "stability-safety"
+		},
+		{
+			"slug": "fire-suppression",
+			"name": "Fire Suppression System",
+			"category": "stability-safety"
+		},
+		{
+			"slug": "life-raft",
+			"name": "Life Raft",
+			"category": "stability-safety"
+		},
+		{
+			"slug": "hardtop",
+			"name": "Hardtop",
+			"category": "deck-exterior"
+		},
+		{
+			"slug": "swim-platform",
+			"name": "Swim Platform",
+			"category": "deck-exterior"
+		},
+		{
+			"slug": "hydraulic-swim-platform",
+			"name": "Hydraulic Swim Platform",
+			"category": "deck-exterior"
+		},
+		{
+			"slug": "passerelle",
+			"name": "Passerelle",
+			"category": "deck-exterior"
+		},
+		{
+			"slug": "crane",
+			"name": "Crane",
+			"category": "deck-exterior"
+		},
+		{
+			"slug": "beach-club",
+			"name": "Beach Club",
+			"category": "deck-exterior"
+		},
+		{
+			"slug": "tender-garage",
+			"name": "Tender Garage",
+			"category": "deck-exterior"
+		},
+		{
+			"slug": "teak-decks",
+			"name": "Teak Decks",
+			"category": "deck-exterior"
+		},
+		{
+			"slug": "bimini",
+			"name": "Bimini",
+			"category": "deck-exterior"
+		},
+		{
+			"slug": "barbecue",
+			"name": "Barbecue",
+			"category": "deck-exterior"
+		},
+		{
+			"slug": "heating",
+			"name": "Heating",
+			"category": "comfort-luxury"
+		},
+		{
+			"slug": "swimming-pool",
+			"name": "Swimming Pool",
+			"category": "comfort-luxury"
+		},
+		{
+			"slug": "cinema",
+			"name": "Cinema",
+			"category": "entertainment"
+		},
+		{
+			"slug": "satellite-tv",
+			"name": "Satellite TV",
+			"category": "entertainment"
+		},
+		{
+			"slug": "starlink",
+			"name": "Starlink",
+			"category": "entertainment"
+		},
+		{
+			"slug": "audio-system",
+			"name": "Audio System",
+			"category": "entertainment"
 		}
 	]
 }
