@@ -245,9 +245,9 @@ final class ListingForm
                                 <label class="oy-label" for="oy_location_state"><?php esc_html_e('State', 'openyacht'); ?></label>
                                 <input class="oy-input" name="oy[location_state]" id="oy_location_state" type="text" value="<?php echo esc_attr($v('location_state', $listing?->locationState)); ?>">
                             </div>
-                            <div class="col-span-2 max-[900px]:col-span-3">
+                            <div class="col-span-4 max-[900px]:col-span-8">
                                 <label class="oy-label" for="oy_location_country"><?php esc_html_e('Country', 'openyacht'); ?></label>
-                                <input class="oy-input" name="oy[location_country]" id="oy_location_country" type="text" maxlength="2" placeholder="FR" value="<?php echo esc_attr($v('location_country', $listing?->locationCountry)); ?>">
+                                <?php $this->countryCombobox($v('location_country', $listing?->locationCountry)); ?>
                             </div>
 
                             <div class="col-span-12 mt-1 flex items-center gap-2.5">
@@ -332,42 +332,46 @@ final class ListingForm
 
                     <section id="oy-description" class="scroll-mt-16 p-6">
                         <h2 class="oy-section-h"><?php esc_html_e('Description', 'openyacht'); ?></h2>
-                        <div class="mt-5 grid grid-cols-12 gap-y-5">
-                            <div class="col-span-12">
-                                <label class="oy-label" for="oy_overview"><?php esc_html_e('Overview', 'openyacht'); ?></label>
-                                <?php
-            $overview = $oldInput !== null
-                ? (string) ($oldInput['overview'] ?? '')
-                : (string) ($listing?->descriptions[0]['content'] ?? '');
-        if (function_exists('wp_editor')) {
-            wp_editor($overview, 'oy_overview', [
-                'textarea_name' => 'oy[overview]',
-                'textarea_rows' => 12,
-                'media_buttons' => false,
-                'quicktags' => ['buttons' => 'strong,em,ul,ol,li,link'],
-                'tinymce' => [
-                    'toolbar1' => 'formatselect,bold,italic,bullist,numlist,link,unlink,removeformat,undo,redo',
-                    'toolbar2' => '',
-                    'block_formats' => 'Paragraph=p;Heading 3=h3;Heading 4=h4',
-                    'valid_elements' => 'p,br,ul,ol,li,strong/b,em/i,h3,h4,a[href|rel|target]',
-                ],
-            ]);
-        } else {
-            echo '<textarea class="oy-textarea" name="oy[overview]" id="oy_overview" rows="10">' . esc_textarea($overview) . '</textarea>';
+                        <p class="oy-section-sub mt-1"><?php esc_html_e('Content blocks travel with a section label — overview and highlights are the well-known ones partners place predictably.', 'openyacht'); ?></p>
+                        <datalist id="oy_desc_sections">
+                            <option value="overview"></option>
+                            <option value="highlights"></option>
+                        </datalist>
+                        <?php
+                        $descBlocks = $oldInput !== null
+                            ? array_values(array_filter((array) ($oldInput['descriptions'] ?? []), 'is_array'))
+                            : ($listing->descriptions ?? []);
+
+        if ($descBlocks === []) {
+            $descBlocks = [['section' => 'overview', 'content' => '']];
         }
         ?>
-                                <p class="oy-help"><?php esc_html_e('The wire allows: p, br, ul, ol, li, strong, em, h3, h4, https links. Anything else is stripped on save — the Text tab shows the exact source.', 'openyacht'); ?></p>
-                            </div>
-                            <div class="col-span-12">
-                                <label class="oy-label" for="oy_features"><?php esc_html_e('Features', 'openyacht'); ?></label>
-                                <?php
-        $features = $oldInput !== null
-            ? (string) ($oldInput['features'] ?? '')
-            : implode("\n", array_column($listing->features ?? [], 'name'));
-        ?>
-                                <textarea class="oy-textarea" name="oy[features]" id="oy_features" rows="5" placeholder="<?php esc_attr_e('One feature per line', 'openyacht'); ?>"><?php echo esc_textarea($features); ?></textarea>
-                            </div>
+                        <div class="mt-5 flex flex-col gap-6" data-oy-desc-blocks>
+                            <?php foreach ($descBlocks as $i => $block) : ?>
+                                <?php $this->descriptionBlock((string) $i, (string) ($block['section'] ?? ''), (string) ($block['content'] ?? '')); ?>
+                            <?php endforeach; ?>
                         </div>
+                        <template id="oy_desc_template"><?php $this->descriptionBlock('__INDEX__', '', '', true); ?></template>
+                        <button type="button" class="oy-btn oy-btn-ghost mt-4" id="oy_desc_add"><?php esc_html_e('Add content block', 'openyacht'); ?></button>
+                        <p class="oy-help"><?php esc_html_e('The wire allows: p, br, ul, ol, li, strong, em, h3, h4, https links. Anything else is stripped on save — the Text tab shows the exact source.', 'openyacht'); ?></p>
+
+                        <h3 class="oy-section-h mt-8" style="font-size:13.5px;"><?php esc_html_e('Features', 'openyacht'); ?></h3>
+                        <?php
+        $featureRows = $oldInput !== null
+            ? array_values(array_filter((array) ($oldInput['features'] ?? []), 'is_array'))
+            : ($listing->features ?? []);
+
+        if ($featureRows === []) {
+            $featureRows = [['name' => '', 'category' => '']];
+        }
+        ?>
+                        <div class="mt-3 flex flex-col gap-2" data-oy-feature-rows>
+                            <?php foreach ($featureRows as $i => $row) : ?>
+                                <?php $this->featureRow((string) $i, (string) ($row['name'] ?? ''), (string) ($row['category'] ?? '')); ?>
+                            <?php endforeach; ?>
+                        </div>
+                        <template id="oy_feature_template"><?php $this->featureRow('__INDEX__', '', ''); ?></template>
+                        <button type="button" class="oy-btn oy-btn-ghost mt-3" id="oy_feature_add"><?php esc_html_e('Add feature', 'openyacht'); ?></button>
                     </section>
                     <hr class="oy-rule">
 
@@ -438,6 +442,64 @@ final class ListingForm
         }
 
         $this->combobox('oy[builder_slug]', 'oy_builder', $currentSlug, $options, __('Search builders…', 'openyacht'), __('Builders', 'openyacht'));
+    }
+
+    /**
+     * One repeatable description block: a section label + restricted rich
+     * text. Template rows carry the literal __INDEX__ placeholder and a
+     * plain textarea; editor.js initialises TinyMCE on insertion.
+     */
+    private function descriptionBlock(string $index, string $section, string $content, bool $isTemplate = false): void
+    {
+        ?>
+        <div class="rounded-md border border-(--color-line) p-4" data-oy-block>
+            <div class="mb-3 flex items-center gap-2">
+                <label class="oy-label !mb-0" for="oy_desc_section_<?php echo esc_attr($index); ?>"><?php esc_html_e('Section', 'openyacht'); ?></label>
+                <input class="oy-input max-w-52" style="width:auto;" list="oy_desc_sections" name="oy[descriptions][<?php echo esc_attr($index); ?>][section]" id="oy_desc_section_<?php echo esc_attr($index); ?>" value="<?php echo esc_attr($section); ?>" placeholder="overview">
+                <button type="button" class="oy-row-x ml-auto" data-oy-remove-block aria-label="<?php esc_attr_e('Remove this content block', 'openyacht'); ?>">&times;</button>
+            </div>
+            <?php
+            if (! $isTemplate && function_exists('wp_editor')) {
+                wp_editor($content, 'oy_desc_' . $index, [
+                    'textarea_name' => 'oy[descriptions][' . $index . '][content]',
+                    'textarea_rows' => 8,
+                    'media_buttons' => false,
+                    'quicktags' => ['buttons' => 'strong,em,ul,ol,li,link'],
+                    'tinymce' => [
+                        'toolbar1' => 'formatselect,bold,italic,bullist,numlist,link,unlink,removeformat,undo,redo',
+                        'toolbar2' => '',
+                        'block_formats' => 'Paragraph=p;Heading 3=h3;Heading 4=h4',
+                        'valid_elements' => 'p,br,ul,ol,li,strong/b,em/i,h3,h4,a[href|rel|target]',
+                    ],
+                ]);
+            } else {
+                echo '<textarea class="oy-textarea" name="oy[descriptions][' . esc_attr($index) . '][content]" id="oy_desc_' . esc_attr($index) . '" rows="8">' . esc_textarea($content) . '</textarea>';
+            }
+        ?>
+        </div>
+        <?php
+    }
+
+    private function featureRow(string $index, string $name, string $category): void
+    {
+        ?>
+        <div class="flex items-center gap-2" data-oy-block>
+            <input class="oy-input" name="oy[features][<?php echo esc_attr($index); ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="<?php esc_attr_e('Feature — e.g. Air conditioning', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature name', 'openyacht'); ?>">
+            <input class="oy-input max-w-44" name="oy[features][<?php echo esc_attr($index); ?>][category]" value="<?php echo esc_attr($category); ?>" placeholder="<?php esc_attr_e('Category (optional)', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature category', 'openyacht'); ?>">
+            <button type="button" class="oy-row-x" data-oy-remove-block aria-label="<?php esc_attr_e('Remove this feature', 'openyacht'); ?>">&times;</button>
+        </div>
+        <?php
+    }
+
+    private function countryCombobox(string $currentCode): void
+    {
+        $options = [['value' => '', 'label' => __('— None —', 'openyacht'), 'hint' => '']];
+
+        foreach ((new \OpenYacht\Federation\Countries())->all() as $code => $name) {
+            $options[] = ['value' => $code, 'label' => $name, 'hint' => $code];
+        }
+
+        $this->combobox('oy[location_country]', 'oy_location_country', strtoupper($currentCode), $options, __('Search countries…', 'openyacht'), __('Countries', 'openyacht'));
     }
 
     private function categoryCombobox(string $currentSlug): void
@@ -558,20 +620,42 @@ final class ListingForm
             }
         }
 
-        $overview = trim((string) ($input['overview'] ?? ''));
-        $descriptions = $overview === '' ? [] : [[
-            'section' => 'overview',
-            'content' => (new RichTextSanitizer())->sanitize($overview, [NodeConfig::identityDomain()]),
-        ]];
+        $sanitizer = new RichTextSanitizer();
+        $descriptions = [];
+
+        foreach ((array) ($input['descriptions'] ?? []) as $block) {
+            if (! is_array($block)) {
+                continue;
+            }
+
+            $content = trim((string) ($block['content'] ?? ''));
+
+            if ($content === '') {
+                continue;
+            }
+
+            $section = strtolower(trim(sanitize_text_field((string) ($block['section'] ?? ''))));
+            $descriptions[] = [
+                'section' => $section !== '' ? $section : null,
+                'content' => $sanitizer->sanitize($content, [NodeConfig::identityDomain()]),
+            ];
+        }
 
         $features = [];
 
-        foreach (explode("\n", (string) ($input['features'] ?? '')) as $line) {
-            $line = trim(sanitize_text_field($line));
-
-            if ($line !== '') {
-                $features[] = ['category' => null, 'name' => $line, 'slug' => null];
+        foreach ((array) ($input['features'] ?? []) as $row) {
+            if (! is_array($row)) {
+                continue;
             }
+
+            $name = trim(sanitize_text_field((string) ($row['name'] ?? '')));
+
+            if ($name === '') {
+                continue;
+            }
+
+            $category = strtolower(trim(sanitize_text_field((string) ($row['category'] ?? ''))));
+            $features[] = ['category' => $category !== '' ? $category : null, 'name' => $name, 'slug' => null];
         }
 
         return [

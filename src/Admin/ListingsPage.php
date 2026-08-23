@@ -46,6 +46,7 @@ final class ListingsPage
         }
 
         wp_enqueue_media();
+        wp_enqueue_editor();
         wp_enqueue_script(
             'openyacht-listing-media',
             plugins_url('assets/admin/listing-media.js', OPENYACHT_FILE),

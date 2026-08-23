@@ -1,30 +1,17 @@
 /**
  * Media-library pickers for the listing form: a single profile image and a
- * multi-select gallery. Selected attachment IDs land in hidden inputs; the
- * server computes the wire facts (URL, hash, dimensions) at save time.
+ * multi-select gallery with per-image removal. Selected attachment IDs
+ * land in hidden inputs; the server computes the wire facts (URL, hash,
+ * dimensions, caption) at save time. Alt text and captions are edited on
+ * the attachment itself, in the media dialog's sidebar.
  */
 (function ($) {
 	'use strict';
 
-	function thumbHtml(attachment) {
-		var url = attachment.sizes && attachment.sizes.thumbnail
+	function thumbUrl(attachment) {
+		return attachment.sizes && attachment.sizes.thumbnail
 			? attachment.sizes.thumbnail.url
 			: attachment.url;
-		return '<img src="' + url + '" class="oy-thumb" alt="">';
-	}
-
-	function renderPreviewByIds(containerId, ids) {
-		var $container = $(containerId);
-		$container.empty();
-		ids.forEach(function (id) {
-			if (!id) {
-				return;
-			}
-			var attachment = wp.media.attachment(id);
-			attachment.fetch().done(function () {
-				$container.append(thumbHtml(attachment.attributes));
-			});
-		});
 	}
 
 	function idsFromInput($input) {
@@ -35,16 +22,59 @@
 		});
 	}
 
+	function renderGallery($input, $container) {
+		var ids = idsFromInput($input);
+		$container.empty();
+
+		if (!ids.length) {
+			$container.append($('<span class="oy-media-empty w-full"></span>').text($container.data('emptyText') || 'No images'));
+			return;
+		}
+
+		ids.forEach(function (id) {
+			var attachment = wp.media.attachment(id);
+			attachment.fetch().done(function () {
+				var $wrap = $('<span class="oy-thumb-wrap"></span>');
+				$wrap.append($('<img class="oy-thumb" alt="">').attr('src', thumbUrl(attachment.attributes)));
+				var $remove = $('<button type="button" class="oy-thumb-x" aria-label="Remove image">&times;</button>');
+				$remove.on('click', function () {
+					var remaining = idsFromInput($input).filter(function (existing) { return existing !== id; });
+					$input.val(remaining.join(','));
+					renderGallery($input, $container);
+				});
+				$wrap.append($remove);
+				$container.append($wrap);
+			});
+		});
+	}
+
+	function renderProfile($input, $container) {
+		var ids = idsFromInput($input);
+		$container.empty();
+
+		if (!ids.length) {
+			$container.append($('<span class="oy-media-empty w-full"></span>').text($container.data('emptyText') || 'No profile image'));
+			return;
+		}
+
+		var attachment = wp.media.attachment(ids[0]);
+		attachment.fetch().done(function () {
+			$container.append($('<img class="oy-thumb" alt="">').attr('src', thumbUrl(attachment.attributes)));
+		});
+	}
+
 	$(function () {
 		var $profileInput = $('#oy_profile_id');
 		var $galleryInput = $('#oy_gallery_ids');
+		var $profilePreview = $('#oy_profile_preview');
+		var $galleryPreview = $('#oy_gallery_preview');
 
 		if (!$profileInput.length) {
 			return;
 		}
 
-		renderPreviewByIds('#oy_profile_preview', idsFromInput($profileInput));
-		renderPreviewByIds('#oy_gallery_preview', idsFromInput($galleryInput));
+		renderProfile($profileInput, $profilePreview);
+		renderGallery($galleryInput, $galleryPreview);
 
 		$('#oy_profile_pick').on('click', function () {
 			var frame = wp.media({
@@ -53,21 +83,20 @@
 				multiple: false
 			});
 			frame.on('select', function () {
-				var attachment = frame.state().get('selection').first();
-				$profileInput.val(attachment.id);
-				$('#oy_profile_preview').html(thumbHtml(attachment.attributes));
+				$profileInput.val(frame.state().get('selection').first().id);
+				renderProfile($profileInput, $profilePreview);
 			});
 			frame.open();
 		});
 
 		$('#oy_profile_clear').on('click', function () {
 			$profileInput.val('');
-			$('#oy_profile_preview').empty();
+			renderProfile($profileInput, $profilePreview);
 		});
 
 		$('#oy_gallery_pick').on('click', function () {
 			var frame = wp.media({
-				title: 'Choose gallery images',
+				title: 'Add gallery images',
 				library: { type: 'image' },
 				multiple: 'add'
 			});
@@ -84,14 +113,14 @@
 					return attachment.id;
 				});
 				$galleryInput.val(ids.join(','));
-				renderPreviewByIds('#oy_gallery_preview', ids);
+				renderGallery($galleryInput, $galleryPreview);
 			});
 			frame.open();
 		});
 
 		$('#oy_gallery_clear').on('click', function () {
 			$galleryInput.val('');
-			$('#oy_gallery_preview').empty();
+			renderGallery($galleryInput, $galleryPreview);
 		});
 	});
 })(jQuery);

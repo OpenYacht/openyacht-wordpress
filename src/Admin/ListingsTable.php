@@ -33,12 +33,27 @@ final class ListingsTable extends \WP_List_Table
     public function get_columns(): array
     {
         return [
+            'thumb' => '',
             'name' => __('Listing', 'openyacht'),
             'status' => __('Status', 'openyacht'),
             'vessel' => __('Vessel', 'openyacht'),
             'price' => __('Price', 'openyacht'),
             'updated' => __('Federation updated', 'openyacht'),
         ];
+    }
+
+    /**
+     * @param Listing $item
+     */
+    public function column_thumb($item): string
+    {
+        foreach (Services::listingMedia()->forListing($item->id) as $media) {
+            if ($media->kind === 'profile' && is_string($media->thumbnailUrl)) {
+                return '<img src="' . esc_url($media->thumbnailUrl) . '" style="width:60px;height:40px;object-fit:cover;border-radius:2px;" loading="lazy" alt="">';
+            }
+        }
+
+        return '<span class="dashicons dashicons-format-image" style="color:#c3c4c7;font-size:32px;width:60px;height:40px;"></span>';
     }
 
     public function prepare_items(): void

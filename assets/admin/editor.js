@@ -392,6 +392,77 @@
 		input.addEventListener('blur', function () { window.setTimeout(close, 150); });
 	}
 
+	/* ---------- repeatable blocks (descriptions, features) ---------- */
+
+	var repeaterCounter = 1000; // never collides with server-rendered indexes
+
+	function initRepeater(containerSelector, templateId, addButtonId, onAdd, onRemove) {
+		var container = document.querySelector(containerSelector);
+		var template = document.getElementById(templateId);
+		var addButton = document.getElementById(addButtonId);
+
+		if (!container || !template || !addButton) {
+			return;
+		}
+
+		addButton.addEventListener('click', function () {
+			var html = template.innerHTML.split('__INDEX__').join(String(repeaterCounter++));
+			var host = document.createElement('div');
+			host.innerHTML = html;
+			var block = host.firstElementChild;
+			container.appendChild(block);
+
+			if (onAdd) {
+				onAdd(block);
+			}
+		});
+
+		container.addEventListener('click', function (event) {
+			var button = event.target.closest('[data-oy-remove-block]');
+
+			if (!button) {
+				return;
+			}
+
+			var block = button.closest('[data-oy-block]');
+
+			if (block) {
+				if (onRemove) {
+					onRemove(block);
+				}
+
+				block.remove();
+			}
+		});
+	}
+
+	var RESTRICTED_TINYMCE = {
+		toolbar1: 'formatselect,bold,italic,bullist,numlist,link,unlink,removeformat,undo,redo',
+		toolbar2: '',
+		block_formats: 'Paragraph=p;Heading 3=h3;Heading 4=h4',
+		valid_elements: 'p,br,ul,ol,li,strong/b,em/i,h3,h4,a[href|rel|target]'
+	};
+
+	function initDescriptionBlocks() {
+		initRepeater('[data-oy-desc-blocks]', 'oy_desc_template', 'oy_desc_add', function (block) {
+			var textarea = block.querySelector('textarea');
+
+			if (textarea && window.wp && wp.editor && wp.editor.initialize) {
+				wp.editor.initialize(textarea.id, {
+					tinymce: RESTRICTED_TINYMCE,
+					quicktags: { buttons: 'strong,em,ul,ol,li,link' },
+					mediaButtons: false
+				});
+			}
+		}, function (block) {
+			var textarea = block.querySelector('textarea');
+
+			if (textarea && window.wp && wp.editor && wp.editor.remove) {
+				wp.editor.remove(textarea.id);
+			}
+		});
+	}
+
 	/* ---------- no implicit submit ---------- */
 
 	function initEnterGuard() {
@@ -424,5 +495,7 @@
 		initUnlistedBuilder();
 		initMap();
 		initEnterGuard();
+		initDescriptionBlocks();
+		initRepeater('[data-oy-feature-rows]', 'oy_feature_template', 'oy_feature_add');
 	});
 })();
