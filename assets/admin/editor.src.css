@@ -230,6 +230,17 @@
         opacity: 1;
     }
 
+    /* The text no longer supports the linked entry — question it loudly. */
+    .oy-chip-slug.is-adrift {
+        background: color-mix(in srgb, var(--color-alert) 10%, transparent);
+        color: var(--color-alert);
+        border-color: color-mix(in srgb, var(--color-alert) 35%, transparent);
+    }
+
+    .oy-chip-slug.is-adrift [data-oy-slug-label]::before {
+        content: "⚠ ";
+    }
+
     .oy-chip-status.is-active {
         background: var(--color-tide-soft);
         color: var(--color-tide);

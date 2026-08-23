@@ -492,9 +492,13 @@
 
 	/**
 	 * The name is display truth; the slug is the sticky vocabulary link.
-	 * Typing a registry name auto-links the row (chip appears, category
-	 * fills if empty); rewording the text keeps the link; the chip's ✕
-	 * unlinks. The server re-validates every slug against the registry.
+	 * Matching is whole-word containment, longest entry first, so
+	 * "Seabob x 10" and "Seabob F5 SR" both (re)link seabob — replacing
+	 * one linked name with another registry name relinks rather than
+	 * keeping the stale slug. Text that no longer contains the linked
+	 * entry's name keeps the link but turns the chip into a visible
+	 * drift warning; the chip's ✕ unlinks. The server re-validates every
+	 * slug against the registry.
 	 */
 	function initFeatureLinks() {
 		var container = document.querySelector('[data-oy-feature-rows]');
@@ -511,7 +515,38 @@
 			return;
 		}
 
-		function setLink(row, slug) {
+		var namesByLength = Object.keys(registry).sort(function (a, b) { return b.length - a.length; });
+
+		function wordContains(haystack, needle) {
+			var idx = haystack.indexOf(needle);
+			while (idx !== -1) {
+				var before = idx > 0 ? haystack[idx - 1] : '';
+				var after = idx + needle.length < haystack.length ? haystack[idx + needle.length] : '';
+				if (!/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after)) {
+					return true;
+				}
+				idx = haystack.indexOf(needle, idx + 1);
+			}
+			return false;
+		}
+
+		function findMatch(text) {
+			var t = text.trim().toLowerCase();
+			if (!t) {
+				return null;
+			}
+			if (registry[t]) {
+				return registry[t];
+			}
+			for (var i = 0; i < namesByLength.length; i++) {
+				if (wordContains(t, namesByLength[i])) {
+					return registry[namesByLength[i]];
+				}
+			}
+			return null;
+		}
+
+		function setLink(row, slug, adrift) {
 			var input = row.querySelector('[data-oy-feature-slug]');
 			var chip = row.querySelector('[data-oy-slug-chip]');
 			if (!input || !chip) {
@@ -519,33 +554,51 @@
 			}
 			input.value = slug;
 			chip.style.display = slug ? '' : 'none';
+			chip.classList.toggle('is-adrift', !!adrift);
 			chip.querySelector('[data-oy-slug-label]').textContent = slug;
+			chip.title = adrift
+				? 'The text no longer matches this linked feature — unlink if the link is wrong'
+				: 'Linked to the shared vocabulary — partners can filter on this';
+		}
+
+		function evaluate(row, fillCategory) {
+			var nameInput = row.querySelector('[data-oy-feature-name]');
+			var slugInput = row.querySelector('[data-oy-feature-slug]');
+			if (!nameInput || !slugInput) {
+				return;
+			}
+			var match = findMatch(nameInput.value);
+
+			if (match) {
+				setLink(row, match.slug, false);
+				var category = row.querySelector('[data-oy-feature-category]');
+				if (fillCategory && category && category.value.trim() === '' && match.category) {
+					category.value = match.category;
+				}
+			} else if (nameInput.value.trim() === '') {
+				setLink(row, '', false); // cleared name: nothing left to link
+			} else if (slugInput.value) {
+				// Names are changeable, slugs are not — but a link the text
+				// no longer supports must be visibly questionable.
+				setLink(row, slugInput.value, true);
+			}
 		}
 
 		container.addEventListener('input', function (event) {
-			if (!event.target.hasAttribute('data-oy-feature-name')) {
-				return;
+			if (event.target.hasAttribute('data-oy-feature-name')) {
+				evaluate(event.target.closest('[data-oy-block]'), true);
 			}
-			var row = event.target.closest('[data-oy-block]');
-			var entry = registry[event.target.value.trim().toLowerCase()];
-
-			if (entry) {
-				setLink(row, entry.slug);
-				var category = row.querySelector('[data-oy-feature-category]');
-				if (category && category.value.trim() === '' && entry.category) {
-					category.value = entry.category;
-				}
-			} else if (event.target.value.trim() === '') {
-				setLink(row, ''); // cleared name: nothing left to link
-			}
-			// Non-matching text keeps an existing link — names are
-			// changeable, slugs are not.
 		});
 
 		container.addEventListener('click', function (event) {
 			if (event.target.closest('[data-oy-slug-unlink]')) {
-				setLink(event.target.closest('[data-oy-block]'), '');
+				setLink(event.target.closest('[data-oy-block]'), '', false);
 			}
+		});
+
+		// Rows arriving from the server may already be adrift.
+		container.querySelectorAll('[data-oy-block]').forEach(function (row) {
+			evaluate(row, false);
 		});
 	}
 
