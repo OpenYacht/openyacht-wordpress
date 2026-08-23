@@ -202,8 +202,8 @@ final class ListingSerializer
     private function mediaBlock(Listing $listing, bool $documentsGranted): array
     {
         $profile = null;
-        $gallery = [];
-        $sort = 0;
+        $collections = ['gallery' => [], 'layout' => [], 'video' => [], 'tour' => [], 'document' => []];
+        $sorts = ['gallery' => 0, 'layout' => 0, 'video' => 0, 'tour' => 0, 'document' => 0];
 
         foreach ($this->media->forListing($listing->id) as $item) {
             if ($item->kind === 'profile' && $profile === null) {
@@ -215,26 +215,55 @@ final class ListingSerializer
                     'caption' => $item->caption,
                     'thumbnail_url' => $item->thumbnailUrl,
                 ];
-            } elseif ($item->kind === 'gallery') {
-                $gallery[] = [
+
+                continue;
+            }
+
+            if (! array_key_exists($item->kind, $collections)) {
+                continue;
+            }
+
+            $sort = ++$sorts[$item->kind];
+            $collections[$item->kind][] = match ($item->kind) {
+                'gallery' => [
                     'url' => $item->url,
                     'sha256' => $item->sha256,
                     'category' => $item->category,
                     'width' => $item->width,
                     'height' => $item->height,
                     'caption' => $item->caption,
-                    'sort' => ++$sort,
-                ];
-            }
+                    'sort' => $sort,
+                ],
+                'layout' => [
+                    'url' => $item->url,
+                    'sha256' => $item->sha256,
+                    'width' => $item->width,
+                    'height' => $item->height,
+                    'caption' => $item->caption,
+                    'sort' => $sort,
+                ],
+                'video', 'document' => [
+                    'url' => $item->url,
+                    'sha256' => $item->sha256,
+                    'caption' => $item->caption,
+                    'sort' => $sort,
+                ],
+                // tour_item carries no sha256 — external pages, not files.
+                'tour' => [
+                    'url' => $item->url,
+                    'caption' => $item->caption,
+                    'sort' => $sort,
+                ],
+            };
         }
 
         return [
             'profile' => $profile,
-            'gallery' => $gallery,
-            'layouts' => [],
-            'videos' => [],
-            'tours' => [],
-            'documents' => $documentsGranted ? [] : [],
+            'gallery' => $collections['gallery'],
+            'layouts' => $collections['layout'],
+            'videos' => $collections['video'],
+            'tours' => $collections['tour'],
+            'documents' => $documentsGranted ? $collections['document'] : [],
         ];
     }
 

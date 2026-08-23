@@ -51,7 +51,7 @@ final class ListingForm
             return $oldInput !== null ? ! empty($oldInput[$key]) : $fromListing;
         };
 
-        [$profileId, $galleryCsv] = $this->mediaState($listing, $oldInput);
+        $profileId = $this->profileAttachmentId($listing, $oldInput);
         $currentAudience = $oldInput !== null
             ? (string) ($oldInput['audience'] ?? 'everyone')
             : ($listing?->audience->value ?? 'everyone');
@@ -383,25 +383,33 @@ final class ListingForm
 
                     <section id="oy-media" class="scroll-mt-16 p-6">
                         <h2 class="oy-section-h"><?php esc_html_e('Media', 'openyacht'); ?></h2>
-                        <p class="oy-section-sub mt-1"><?php esc_html_e('The profile image is the hero every partner must use. A listing with imagery needs one; with none, leave it empty — never a placeholder.', 'openyacht'); ?></p>
-                        <div class="mt-5 grid grid-cols-12 gap-x-6 gap-y-6">
-                            <div class="col-span-4 max-[900px]:col-span-12">
+                        <p class="oy-section-sub mt-1"><?php esc_html_e('The profile image is the hero every partner must use. A listing with imagery needs one; with none, leave it empty — never a placeholder. Drag items to reorder; alt text and captions are edited in the media dialog.', 'openyacht'); ?></p>
+                        <div class="mt-5 grid grid-cols-12 gap-x-6 gap-y-7">
+                            <div class="col-span-12">
                                 <span class="oy-label"><?php esc_html_e('Profile image', 'openyacht'); ?></span>
                                 <input type="hidden" name="oy[profile_id]" id="oy_profile_id" value="<?php echo esc_attr($profileId); ?>">
-                                <div id="oy_profile_preview" class="mb-2.5 flex flex-wrap gap-1.5"><span class="oy-media-empty w-full"><?php esc_html_e('No profile image', 'openyacht'); ?></span></div>
+                                <div id="oy_profile_preview" class="mb-2.5 flex flex-wrap gap-1.5"><span class="oy-media-empty" style="min-width:220px;"><?php esc_html_e('No profile image', 'openyacht'); ?></span></div>
                                 <div class="flex gap-2">
                                     <button type="button" class="oy-btn oy-btn-ghost" id="oy_profile_pick"><?php esc_html_e('Choose', 'openyacht'); ?></button>
                                     <button type="button" class="oy-btn oy-btn-ghost" id="oy_profile_clear"><?php esc_html_e('Remove', 'openyacht'); ?></button>
                                 </div>
                             </div>
-                            <div class="col-span-8 max-[900px]:col-span-12">
-                                <span class="oy-label"><?php esc_html_e('Gallery', 'openyacht'); ?></span>
-                                <input type="hidden" name="oy[gallery_ids]" id="oy_gallery_ids" value="<?php echo esc_attr($galleryCsv); ?>">
-                                <div id="oy_gallery_preview" class="mb-2.5 flex flex-wrap gap-1.5"><span class="oy-media-empty w-full"><?php esc_html_e('No gallery images', 'openyacht'); ?></span></div>
-                                <div class="flex gap-2">
-                                    <button type="button" class="oy-btn oy-btn-ghost" id="oy_gallery_pick"><?php esc_html_e('Choose images', 'openyacht'); ?></button>
-                                    <button type="button" class="oy-btn oy-btn-ghost" id="oy_gallery_clear"><?php esc_html_e('Clear', 'openyacht'); ?></button>
-                                </div>
+
+                            <?php
+                            $this->mediaList('gallery', __('Gallery', 'openyacht'), __('Add images', 'openyacht'), __('Categorise each image so partners can group them: exterior, interior, lifestyle, crew.', 'openyacht'), $listing, $oldInput, true);
+        $this->mediaList('layout', __('Layouts & deck plans', 'openyacht'), __('Add layout images', 'openyacht'), __('GA and deck plans as images; plan PDFs belong in documents.', 'openyacht'), $listing, $oldInput, false);
+        $this->mediaList('document', __('Documents', 'openyacht'), __('Add documents', 'openyacht'), __('Brochures and plan PDFs. Shared only with partners granted the documents field group.', 'openyacht'), $listing, $oldInput, false);
+        ?>
+
+                            <div class="col-span-6 max-[900px]:col-span-12">
+                                <span class="oy-label"><?php esc_html_e('Video links', 'openyacht'); ?></span>
+                                <?php $this->linkRows('videos', $listing, $oldInput); ?>
+                                <button type="button" class="oy-btn oy-btn-ghost mt-2" data-oy-link-add="videos"><?php esc_html_e('Add video link', 'openyacht'); ?></button>
+                            </div>
+                            <div class="col-span-6 max-[900px]:col-span-12">
+                                <span class="oy-label"><?php esc_html_e('Virtual tours & walkthroughs', 'openyacht'); ?></span>
+                                <?php $this->linkRows('tours', $listing, $oldInput); ?>
+                                <button type="button" class="oy-btn oy-btn-ghost mt-2" data-oy-link-add="tours"><?php esc_html_e('Add tour link', 'openyacht'); ?></button>
                             </div>
                         </div>
                     </section>
@@ -448,6 +456,133 @@ final class ListingForm
         }
 
         $this->combobox('oy[builder_slug]', 'oy_builder', $currentSlug, $options, __('Search builders…', 'openyacht'), __('Builders', 'openyacht'));
+    }
+
+    private const GALLERY_CATEGORIES = ['exterior', 'interior', 'lifestyle', 'crew'];
+
+    /**
+     * One orderable media list (gallery / layouts / documents): existing
+     * items render server-side with their attachment thumbs; the JS layer
+     * adds picker items, drag-reorders (submission order = DOM order),
+     * and removes. Documents pick PDFs.
+     *
+     * @param array<string, mixed>|null $oldInput
+     */
+    private function mediaList(string $kind, string $label, string $addLabel, string $help, ?Listing $listing, ?array $oldInput, bool $withCategory): void
+    {
+        $inputName = ['gallery' => 'gallery', 'layout' => 'layouts', 'document' => 'documents'][$kind];
+        $items = [];
+
+        if ($oldInput !== null) {
+            foreach ((array) ($oldInput[$inputName] ?? []) as $row) {
+                if (is_array($row) && is_numeric($row['id'] ?? null)) {
+                    $items[] = ['id' => (int) $row['id'], 'category' => (string) ($row['category'] ?? '')];
+                }
+            }
+        } elseif ($listing !== null) {
+            foreach (Services::listingMedia()->forListing($listing->id) as $media) {
+                if ($media->kind === $kind && $media->attachmentId !== null) {
+                    $items[] = ['id' => $media->attachmentId, 'category' => (string) ($media->category ?? '')];
+                }
+            }
+        }
+
+        ?>
+        <div class="col-span-12">
+            <span class="oy-label"><?php echo esc_html($label); ?></span>
+            <p class="oy-help !mt-0 mb-2.5"><?php echo esc_html($help); ?></p>
+            <div class="flex flex-col gap-1.5" data-oy-media-list="<?php echo esc_attr($inputName); ?>" <?php echo $withCategory ? 'data-with-category="1"' : ''; ?>>
+                <?php foreach ($items as $i => $item) : ?>
+                    <?php $this->mediaItemCard($inputName, (string) $i, $item['id'], $item['category'], $withCategory, $kind === 'document'); ?>
+                <?php endforeach; ?>
+                <?php if ($items === []) : ?>
+                    <span class="oy-media-empty" data-oy-media-placeholder><?php esc_html_e('Nothing added yet', 'openyacht'); ?></span>
+                <?php endif; ?>
+            </div>
+            <button type="button" class="oy-btn oy-btn-ghost mt-2" data-oy-media-add="<?php echo esc_attr($inputName); ?>" data-media-type="<?php echo esc_attr($kind === 'document' ? 'application/pdf' : 'image'); ?>"><?php echo esc_html($addLabel); ?></button>
+        </div>
+        <?php
+    }
+
+    private function mediaItemCard(string $inputName, string $index, int $attachmentId, string $category, bool $withCategory, bool $isDocument): void
+    {
+        $thumb = $isDocument ? null : wp_get_attachment_image_url($attachmentId, 'thumbnail');
+        $title = get_the_title($attachmentId);
+
+        ?>
+        <div class="oy-media-item" draggable="true" data-oy-media-item>
+            <span class="oy-drag" title="<?php esc_attr_e('Drag to reorder', 'openyacht'); ?>" aria-hidden="true">
+                <svg viewBox="0 0 8 14" width="8" height="14" fill="currentColor"><circle cx="2" cy="2" r="1.3"/><circle cx="6" cy="2" r="1.3"/><circle cx="2" cy="7" r="1.3"/><circle cx="6" cy="7" r="1.3"/><circle cx="2" cy="12" r="1.3"/><circle cx="6" cy="12" r="1.3"/></svg>
+            </span>
+            <?php if (is_string($thumb)) : ?>
+                <img class="oy-thumb-sm" src="<?php echo esc_url($thumb); ?>" alt="">
+            <?php else : ?>
+                <span class="dashicons dashicons-media-document" style="font-size:26px;width:44px;height:33px;color:var(--color-slate);display:flex;align-items:center;justify-content:center;"></span>
+            <?php endif; ?>
+            <span class="oy-media-name"><?php echo esc_html($title !== '' ? $title : '#' . $attachmentId); ?></span>
+            <?php if ($withCategory) : ?>
+                <select class="oy-select !w-auto" name="oy[<?php echo esc_attr($inputName); ?>][<?php echo esc_attr($index); ?>][category]" aria-label="<?php esc_attr_e('Image category', 'openyacht'); ?>">
+                    <option value=""><?php esc_html_e('— category —', 'openyacht'); ?></option>
+                    <?php foreach (self::GALLERY_CATEGORIES as $option) : ?>
+                        <option value="<?php echo esc_attr($option); ?>" <?php selected($category, $option); ?>><?php echo esc_html(ucfirst($option)); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            <?php endif; ?>
+            <input type="hidden" name="oy[<?php echo esc_attr($inputName); ?>][<?php echo esc_attr($index); ?>][id]" value="<?php echo (int) $attachmentId; ?>">
+            <button type="button" class="oy-row-x" data-oy-media-remove aria-label="<?php esc_attr_e('Remove', 'openyacht'); ?>">&times;</button>
+        </div>
+        <?php
+    }
+
+    /**
+     * External link rows (videos, tours): https URL + caption.
+     *
+     * @param array<string, mixed>|null $oldInput
+     */
+    private function linkRows(string $key, ?Listing $listing, ?array $oldInput): void
+    {
+        $rowKind = $key === 'videos' ? 'video' : 'tour';
+        $rows = [];
+
+        if ($oldInput !== null) {
+            foreach ((array) ($oldInput[$key] ?? []) as $row) {
+                if (is_array($row)) {
+                    $rows[] = ['url' => (string) ($row['url'] ?? ''), 'caption' => (string) ($row['caption'] ?? '')];
+                }
+            }
+        } elseif ($listing !== null) {
+            foreach (Services::listingMedia()->forListing($listing->id) as $media) {
+                if ($media->kind === $rowKind) {
+                    $rows[] = ['url' => (string) $media->url, 'caption' => (string) ($media->caption ?? '')];
+                }
+            }
+        }
+
+        if ($rows === []) {
+            $rows = [['url' => '', 'caption' => '']];
+        }
+
+        echo '<div class="flex flex-col gap-2" data-oy-link-rows="' . esc_attr($key) . '">';
+
+        foreach ($rows as $i => $row) {
+            $this->linkRow($key, (string) $i, $row['url'], $row['caption']);
+        }
+
+        echo '</div>';
+        echo '<template data-oy-link-template="' . esc_attr($key) . '">';
+        $this->linkRow($key, '__INDEX__', '', '');
+        echo '</template>';
+    }
+
+    private function linkRow(string $key, string $index, string $url, string $caption): void
+    {
+        ?>
+        <div class="flex items-center gap-2" data-oy-block>
+            <input class="oy-input" type="url" name="oy[<?php echo esc_attr($key); ?>][<?php echo esc_attr($index); ?>][url]" value="<?php echo esc_attr($url); ?>" placeholder="https://…" aria-label="<?php esc_attr_e('Link URL', 'openyacht'); ?>">
+            <input class="oy-input max-w-44" name="oy[<?php echo esc_attr($key); ?>][<?php echo esc_attr($index); ?>][caption]" value="<?php echo esc_attr($caption); ?>" placeholder="<?php esc_attr_e('Caption (optional)', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Link caption', 'openyacht'); ?>">
+            <button type="button" class="oy-row-x" data-oy-remove-block aria-label="<?php esc_attr_e('Remove link', 'openyacht'); ?>">&times;</button>
+        </div>
+        <?php
     }
 
     /**
@@ -546,26 +681,20 @@ final class ListingForm
 
     /**
      * @param array<string, mixed>|null $oldInput
-     * @return array{0: string, 1: string}
      */
-    private function mediaState(?Listing $listing, ?array $oldInput): array
+    private function profileAttachmentId(?Listing $listing, ?array $oldInput): string
     {
-        $media = $listing !== null ? Services::listingMedia()->forListing($listing->id) : [];
-        $profile = null;
-        $galleryIds = [];
+        if ($oldInput !== null) {
+            return (string) ($oldInput['profile_id'] ?? '');
+        }
 
-        foreach ($media as $item) {
-            if ($item->kind === 'profile' && $profile === null) {
-                $profile = $item;
-            } elseif ($item->kind === 'gallery' && $item->attachmentId !== null) {
-                $galleryIds[] = $item->attachmentId;
+        foreach ($listing !== null ? Services::listingMedia()->forListing($listing->id) : [] as $item) {
+            if ($item->kind === 'profile' && $item->attachmentId !== null) {
+                return (string) $item->attachmentId;
             }
         }
 
-        return [
-            $oldInput !== null ? (string) ($oldInput['profile_id'] ?? '') : (string) ($profile->attachmentId ?? ''),
-            $oldInput !== null ? (string) ($oldInput['gallery_ids'] ?? '') : implode(',', $galleryIds),
-        ];
+        return '';
     }
 
     /**
@@ -720,30 +849,57 @@ final class ListingForm
         $profileId = isset($input['profile_id']) && is_numeric($input['profile_id']) ? (int) $input['profile_id'] : 0;
 
         if ($profileId > 0) {
-            $row = $this->attachmentRow($profileId, 'profile', 0);
+            $rows[] = $this->attachmentRow($profileId, 'profile', 0);
+        }
 
-            if ($row !== null) {
-                $rows[] = $row;
+        // POST preserves insertion order, and the JS keeps DOM order = drag
+        // order, so the array position IS the curated sort.
+        foreach (['gallery' => 'gallery', 'layouts' => 'layout', 'documents' => 'document'] as $inputName => $kind) {
+            $sort = 1;
+
+            foreach (is_array($input[$inputName] ?? null) ? $input[$inputName] : [] as $item) {
+                if (! is_array($item) || ! is_numeric($item['id'] ?? null)) {
+                    continue;
+                }
+
+                $category = in_array($item['category'] ?? '', self::GALLERY_CATEGORIES, true) ? (string) $item['category'] : null;
+                $rows[] = $this->attachmentRow((int) $item['id'], $kind, $sort++, $kind === 'gallery' ? $category : null);
             }
         }
 
-        $galleryIds = array_values(array_filter(array_map('intval', explode(',', (string) ($input['gallery_ids'] ?? '')))));
+        foreach (['videos' => 'video', 'tours' => 'tour'] as $inputName => $kind) {
+            $sort = 1;
 
-        foreach ($galleryIds as $index => $attachmentId) {
-            $row = $this->attachmentRow($attachmentId, 'gallery', $index + 1);
+            foreach (is_array($input[$inputName] ?? null) ? $input[$inputName] : [] as $item) {
+                $url = is_array($item) ? trim((string) ($item['url'] ?? '')) : '';
 
-            if ($row !== null) {
-                $rows[] = $row;
+                if (! str_starts_with($url, 'https://') || ! wp_http_validate_url($url)) {
+                    continue;
+                }
+
+                $caption = sanitize_text_field((string) ($item['caption'] ?? ''));
+                $rows[] = [
+                    'kind' => $kind,
+                    'attachment_id' => null,
+                    'url' => esc_url_raw($url),
+                    'thumbnail_url' => null,
+                    'sha256' => null,
+                    'width' => null,
+                    'height' => null,
+                    'caption' => $caption !== '' ? $caption : null,
+                    'category' => null,
+                    'sort' => $sort++,
+                ];
             }
         }
 
-        return $rows;
+        return array_values(array_filter($rows));
     }
 
     /**
      * @return array<string, mixed>|null
      */
-    private function attachmentRow(int $attachmentId, string $kind, int $sort): ?array
+    private function attachmentRow(int $attachmentId, string $kind, int $sort, ?string $category = null): ?array
     {
         $url = wp_get_attachment_url($attachmentId);
         $file = get_attached_file($attachmentId);
@@ -752,8 +908,13 @@ final class ListingForm
             return null;
         }
 
-        $size = wp_getimagesize($file);
+        $size = $kind === 'document' ? false : wp_getimagesize($file);
         $thumbnail = wp_get_attachment_image_url($attachmentId, 'large');
+        $caption = wp_get_attachment_caption($attachmentId);
+
+        if (($caption === '' || $caption === false) && $kind === 'document') {
+            $caption = get_the_title($attachmentId);
+        }
 
         return [
             'kind' => $kind,
@@ -763,8 +924,8 @@ final class ListingForm
             'sha256' => hash_file('sha256', $file) ?: null,
             'width' => is_array($size) ? (int) $size[0] : null,
             'height' => is_array($size) ? (int) $size[1] : null,
-            'caption' => wp_get_attachment_caption($attachmentId) ?: null,
-            'category' => null,
+            'caption' => is_string($caption) && $caption !== '' ? $caption : null,
+            'category' => $category,
             'sort' => $sort,
         ];
     }

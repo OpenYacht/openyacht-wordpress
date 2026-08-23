@@ -429,6 +429,53 @@
         padding: 10px;
     }
 
+    /* One orderable media row: handle, thumb, name, category, remove. */
+    .oy-media-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 8px;
+        border: 1px solid var(--color-line);
+        border-radius: 6px;
+        background: var(--color-card);
+    }
+
+    .oy-media-item .oy-drag {
+        flex: none;
+        color: var(--color-line-strong);
+        cursor: grab;
+        padding: 4px 2px;
+    }
+
+    .oy-media-item:hover .oy-drag {
+        color: var(--color-slate);
+    }
+
+    .oy-media-item.oy-dragging {
+        opacity: 0.45;
+        border-style: dashed;
+        cursor: grabbing;
+    }
+
+    .oy-thumb-sm {
+        flex: none;
+        width: 44px;
+        height: 33px;
+        object-fit: cover;
+        border-radius: 4px;
+        border: 1px solid var(--color-line);
+    }
+
+    .oy-media-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+        color: var(--color-ink);
+    }
+
     /* ------ location map (Leaflet over OSM tiles) ------ */
 
     .oy-map {

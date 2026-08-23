@@ -176,6 +176,48 @@ final class ListingSerializerTest extends TestCase
         self::assertSame([], $wire['media']['gallery']);
     }
 
+    #[Group('LS-8')]
+    public function testAllMediaCollectionsSerializeAndValidate(): void
+    {
+        $this->prices->append(1, '12500000', 'EUR');
+        $hash = str_repeat('ab', 32);
+        $this->media->insert(['listing_id' => 1, 'kind' => 'profile', 'url' => 'https://node.test/u/hero.jpg', 'thumbnail_url' => 'https://node.test/u/hero-t.jpg', 'sha256' => $hash, 'width' => 1600, 'height' => 1000, 'sort' => 0]);
+        $this->media->insert(['listing_id' => 1, 'kind' => 'gallery', 'url' => 'https://node.test/u/aft.jpg', 'sha256' => $hash, 'category' => 'exterior', 'width' => 1600, 'height' => 1000, 'caption' => 'Aft deck', 'sort' => 1]);
+        $this->media->insert(['listing_id' => 1, 'kind' => 'layout', 'url' => 'https://node.test/u/ga.jpg', 'sha256' => $hash, 'width' => 2000, 'height' => 1400, 'sort' => 1]);
+        $this->media->insert(['listing_id' => 1, 'kind' => 'video', 'url' => 'https://video.example/tour', 'caption' => 'Walkthrough', 'sort' => 1]);
+        $this->media->insert(['listing_id' => 1, 'kind' => 'tour', 'url' => 'https://tour.example/360', 'sort' => 1]);
+        $this->media->insert(['listing_id' => 1, 'kind' => 'document', 'url' => 'https://node.test/u/brochure.pdf', 'sha256' => $hash, 'caption' => 'Brochure', 'sort' => 1]);
+
+        $wire = $this->serializer()->serialize($this->listing(), null);
+
+        self::assertSame('exterior', $wire['media']['gallery'][0]['category']);
+        self::assertSame('https://node.test/u/ga.jpg', $wire['media']['layouts'][0]['url']);
+        self::assertArrayNotHasKey('category', $wire['media']['layouts'][0], 'layout_item has no category');
+        self::assertSame('Walkthrough', $wire['media']['videos'][0]['caption']);
+        self::assertArrayNotHasKey('sha256', $wire['media']['tours'][0], 'tour_item carries no content hash');
+        self::assertSame('Brochure', $wire['media']['documents'][0]['caption']);
+
+        $root = dirname(__DIR__, 3);
+        $validator = new ListingValidator(
+            new BuilderRegistry($root . '/resources/registry/builders.json'),
+            new CategoryVocabulary($root . '/resources/registry/categories.json'),
+            $root . '/resources/schemas/v1/listing.schema.json',
+        );
+        self::assertSame([], $validator->validate($wire));
+    }
+
+    #[Group('LS-14')]
+    public function testDocumentsAreWithheldFromUngrantedPartners(): void
+    {
+        $this->prices->append(1, '12500000', 'EUR');
+        $this->media->insert(['listing_id' => 1, 'kind' => 'document', 'url' => 'https://node.test/u/brochure.pdf', 'sha256' => str_repeat('ab', 32), 'sort' => 1]);
+
+        $serializer = $this->serializer();
+
+        self::assertCount(1, $serializer->serialize($this->listing(), $this->partner(null))['media']['documents']);
+        self::assertSame([], $serializer->serialize($this->listing(), $this->partner([]))['media']['documents'], 'documents group withheld: emptied');
+    }
+
     #[Group('API-3')]
     public function testTombstoneForm(): void
     {
