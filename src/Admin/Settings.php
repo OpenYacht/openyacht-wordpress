@@ -80,9 +80,10 @@ final class Settings
 
     public function addPage(): void
     {
-        add_options_page(
-            __('OpenYacht', 'openyacht'),
-            __('OpenYacht', 'openyacht'),
+        add_submenu_page(
+            PartnersPage::MENU_SLUG,
+            __('OpenYacht Settings', 'openyacht'),
+            __('Settings', 'openyacht'),
             'manage_options',
             self::PAGE,
             [$this, 'renderPage'],
