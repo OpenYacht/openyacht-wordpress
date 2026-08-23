@@ -1,0 +1,160 @@
+<?php
+
+declare(strict_types=1);
+
+namespace OpenYacht\Admin;
+
+use OpenYacht\Federation\Listing;
+use OpenYacht\Federation\ListingStatus;
+use OpenYacht\Services;
+
+if (! class_exists('WP_List_Table')) {
+    require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
+}
+
+/**
+ * Standard WP list table of this node's own listings, with the lifecycle
+ * transitions the current status allows (ID-8) as row actions.
+ */
+final class ListingsTable extends \WP_List_Table
+{
+    public function __construct()
+    {
+        parent::__construct([
+            'singular' => 'listing',
+            'plural' => 'listings',
+            'ajax' => false,
+        ]);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function get_columns(): array
+    {
+        return [
+            'name' => __('Listing', 'openyacht'),
+            'status' => __('Status', 'openyacht'),
+            'vessel' => __('Vessel', 'openyacht'),
+            'price' => __('Price', 'openyacht'),
+            'updated' => __('Federation updated', 'openyacht'),
+        ];
+    }
+
+    public function prepare_items(): void
+    {
+        global $wpdb;
+        $table = (new \OpenYacht\Schema($wpdb))->tableName('listings');
+        $ids = array_map('intval', (array) $wpdb->get_col("SELECT id FROM {$table} ORDER BY federation_updated_at DESC LIMIT 200"));
+        $this->items = array_values(array_filter(array_map(
+            static fn (int $id) => Services::listings()->find($id),
+            $ids,
+        )));
+        $this->_column_headers = [$this->get_columns(), [], []];
+    }
+
+    /**
+     * @param Listing $item
+     */
+    public function column_name($item): string
+    {
+        $editUrl = add_query_arg(
+            ['page' => ListingsPage::MENU_SLUG, 'action' => 'edit', 'id' => $item->id],
+            admin_url('admin.php'),
+        );
+
+        $actions = ['edit' => '<a href="' . esc_url($editUrl) . '">' . esc_html__('Edit', 'openyacht') . '</a>'];
+
+        foreach ($item->allowedTransitions() as $target) {
+            $actions['transition_' . $target->value] = $this->transitionButton($item, $target);
+        }
+
+        return '<strong><a href="' . esc_url($editUrl) . '">' . esc_html($item->name ?? '(unnamed)') . '</a></strong>'
+            . '<br><span class="description">' . esc_html($item->uuid) . '</span>'
+            . $this->row_actions($actions);
+    }
+
+    /**
+     * @param Listing $item
+     */
+    public function column_status($item): string
+    {
+        $label = esc_html(str_replace('_', ' ', $item->status->value));
+
+        return $item->status === ListingStatus::Active
+            ? '<span style="color:#00a32a;font-weight:600;">' . $label . '</span>'
+            : $label;
+    }
+
+    /**
+     * @param Listing $item
+     */
+    public function column_vessel($item): string
+    {
+        $parts = array_filter([
+            $item->builderName,
+            $item->modelName,
+            $item->yearBuilt !== null ? (string) $item->yearBuilt : null,
+            $item->loaM !== null ? number_format($item->loaM, 1) . 'm' : null,
+        ]);
+
+        return esc_html(implode(' · ', $parts));
+    }
+
+    /**
+     * @param Listing $item
+     */
+    public function column_price($item): string
+    {
+        if ($item->priceOnApplication) {
+            return esc_html__('POA', 'openyacht');
+        }
+
+        if ($item->priceAmount === null || $item->priceCurrency === null) {
+            return '—';
+        }
+
+        return esc_html($item->priceCurrency . ' ' . number_format((float) $item->priceAmount));
+    }
+
+    /**
+     * @param Listing $item
+     */
+    public function column_updated($item): string
+    {
+        return esc_html($item->federationUpdatedAt ?? '');
+    }
+
+    /**
+     * @param mixed $item
+     */
+    public function column_default($item, $column_name): string
+    {
+        return '';
+    }
+
+    private function transitionButton(Listing $listing, ListingStatus $target): string
+    {
+        $labels = [
+            'active' => $listing->status === ListingStatus::Draft ? __('Publish', 'openyacht') : __('Relist', 'openyacht'),
+            'under_offer' => __('Under offer', 'openyacht'),
+            'sold' => __('Mark sold', 'openyacht'),
+            'withdrawn' => __('Withdraw', 'openyacht'),
+        ];
+
+        $form = '<form method="post" action="%s" style="display:inline">'
+            . '<input type="hidden" name="action" value="openyacht_listing_transition">'
+            . '<input type="hidden" name="id" value="%d">'
+            . '<input type="hidden" name="target" value="%s">'
+            . '%s<button type="submit" class="button-link">%s</button></form>';
+
+        return sprintf(
+            $form,
+            esc_url(admin_url('admin-post.php')),
+            $listing->id,
+            esc_attr($target->value),
+            wp_nonce_field('openyacht_listing_transition', '_wpnonce', true, false),
+            esc_html($labels[$target->value] ?? $target->value),
+        );
+    }
+}

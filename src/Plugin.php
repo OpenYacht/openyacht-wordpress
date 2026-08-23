@@ -75,6 +75,7 @@ final class Plugin
         if (is_admin()) {
             (new Settings())->register();
             (new Admin\PartnersPage())->register();
+            (new Admin\ListingsPage())->register();
             add_action('admin_notices', [$this, 'syncWatchdogNotice']);
         }
     }

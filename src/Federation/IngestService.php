@@ -21,9 +21,7 @@ final class IngestService
 {
     public function __construct(
         private readonly ListingService $listingService,
-        private readonly ListingRepository $listings,
         private readonly ListingMediaRepository $media,
-        private readonly ListingSerializer $serializer,
         private readonly ListingValidator $validator,
         private readonly RichTextSanitizer $sanitizer,
     ) {
@@ -38,21 +36,32 @@ final class IngestService
     public function publish(array $data)
     {
         $targetStatus = ListingStatus::tryFrom((string) ($data['status'] ?? 'active')) ?? ListingStatus::Active;
-        $listing = $this->listingService->create($this->decompose($data));
-        $this->storeMedia($listing->id, is_array($data['media'] ?? null) ? $data['media'] : []);
+        $mediaRows = $this->mediaRows(0, is_array($data['media'] ?? null) ? $data['media'] : []);
 
-        // Validate the persisted listing's complete wire view — the same
-        // serialisation partners will receive. A draft is never
-        // distributed (LS-7), so nothing leaks before validation passes;
-        // the wire enum has no 'draft', so validate as the target status.
-        $wire = $this->serializer->serialize($this->listings->find($listing->id) ?? $listing, null);
-        $wire['status'] = $targetStatus === ListingStatus::Draft ? ListingStatus::Active->value : $targetStatus->value;
-        $errors = $this->validator->validate($wire);
+        return $this->createFromColumns($this->decompose($data), $mediaRows, $targetStatus);
+    }
+
+    /**
+     * Create a listing from a column map + media rows — the shared entry
+     * for the admin form and the wire-shaped API. Validates the candidate
+     * wire view BEFORE anything is persisted.
+     *
+     * @param array<string, mixed> $columns
+     * @param list<array<string, mixed>> $mediaRows
+     * @return Listing|\WP_Error
+     */
+    public function createFromColumns(array $columns, array $mediaRows, ListingStatus $targetStatus)
+    {
+        $errors = $this->validateCandidate($columns, $mediaRows, $targetStatus);
 
         if ($errors !== []) {
-            $this->listings->delete($listing->id); // Roll back: it never existed.
+            return new \WP_Error('openyacht_invalid_listing', __('The listing failed validation.', 'openyacht'), $errors);
+        }
 
-            return new \WP_Error('openyacht_invalid_listing', 'The listing failed validation.', $errors);
+        $listing = $this->listingService->create($columns);
+
+        foreach ($mediaRows as $row) {
+            $this->media->insert(['listing_id' => $listing->id] + $row);
         }
 
         if ($targetStatus !== ListingStatus::Draft) {
@@ -64,6 +73,62 @@ final class IngestService
         }
 
         return $listing;
+    }
+
+    /**
+     * Revise an existing listing. The merged candidate is validated before
+     * any stored data changes, so an invalid edit is refused with zero
+     * side effects (no updated_at bump, no spurious price history).
+     *
+     * @param array<string, mixed> $columns
+     * @param list<array<string, mixed>> $mediaRows the complete new media set
+     * @return Listing|\WP_Error
+     */
+    public function reviseFromColumns(Listing $listing, array $columns, array $mediaRows)
+    {
+        $merged = array_merge(ListingFactory::toColumns($listing), $columns);
+        $errors = $this->validateCandidate($merged, $mediaRows, $listing->status);
+
+        if ($errors !== []) {
+            return new \WP_Error('openyacht_invalid_listing', __('The listing failed validation.', 'openyacht'), $errors);
+        }
+
+        $fresh = $this->listingService->update($listing, $columns);
+        $this->media->deleteForListing($listing->id);
+
+        foreach ($mediaRows as $row) {
+            $this->media->insert(['listing_id' => $listing->id] + $row);
+        }
+
+        return $fresh;
+    }
+
+    /**
+     * Validate the complete wire view of a not-yet-persisted candidate —
+     * the same serialisation partners will receive. The wire enum has no
+     * 'draft' (LS-7), so drafts validate as if active.
+     *
+     * @param array<string, mixed> $columns
+     * @param list<array<string, mixed>> $mediaRows
+     * @return list<string>
+     */
+    public function validateCandidate(array $columns, array $mediaRows, ListingStatus $targetStatus): array
+    {
+        $candidate = ListingFactory::fromColumns(
+            0,
+            '00000000-0000-4000-8000-000000000000',
+            $columns + ['federation_updated_at' => gmdate('Y-m-d H:i:s')],
+        );
+
+        $serializer = new ListingSerializer(
+            new FixedPriceHistory(),
+            new FixedMediaSet(ListingFactory::mediaFromRows(0, $mediaRows)),
+        );
+
+        $wire = $serializer->serialize($candidate, null);
+        $wire['status'] = $targetStatus === ListingStatus::Draft ? ListingStatus::Active->value : $targetStatus->value;
+
+        return $this->validator->validate($wire);
     }
 
     /**
@@ -139,20 +204,24 @@ final class IngestService
 
     /**
      * @param array<string, mixed> $media wire-shaped media block
+     * @return list<array<string, mixed>>
      */
-    private function storeMedia(int $listingId, array $media): void
+    private function mediaRows(int $listingId, array $media): array
     {
+        $rows = [];
         $profile = $media['profile'] ?? null;
 
         if (is_array($profile) && is_string($profile['url'] ?? null)) {
-            $this->media->insert($this->mediaColumns($listingId, 'profile', $profile, 0));
+            $rows[] = $this->mediaColumns($listingId, 'profile', $profile, 0);
         }
 
         foreach (is_array($media['gallery'] ?? null) ? array_values($media['gallery']) : [] as $index => $entry) {
             if (is_array($entry) && is_string($entry['url'] ?? null)) {
-                $this->media->insert($this->mediaColumns($listingId, 'gallery', $entry, $index + 1));
+                $rows[] = $this->mediaColumns($listingId, 'gallery', $entry, $index + 1);
             }
         }
+
+        return $rows;
     }
 
     /**

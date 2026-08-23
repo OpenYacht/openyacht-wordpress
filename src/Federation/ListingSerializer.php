@@ -97,8 +97,9 @@ final class ListingSerializer
             'imo' => $identifiersGranted ? $listing->imo : null,
             'mmsi' => $identifiersGranted ? $listing->mmsi : null,
             'official_number' => $identifiersGranted ? $listing->officialNumber : null,
-            'builder' => ['name' => $listing->builderName, 'slug' => $listing->builderSlug],
-            'model' => ['name' => $listing->modelName, 'slug' => null],
+            // The schema wants null, not {name: null}, when unknown.
+            'builder' => $listing->builderName === null ? null : ['name' => $listing->builderName, 'slug' => $listing->builderSlug],
+            'model' => $listing->modelName === null ? null : ['name' => $listing->modelName, 'slug' => null],
             'year_built' => $listing->yearBuilt,
             'refit_year' => $listing->refitYear,
             'loa_m' => $listing->loaM,
@@ -132,17 +133,39 @@ final class ListingSerializer
                     $this->prices->forListing($listing->id),
                 )
                 : [],
-            'location' => [
-                'display' => $listing->locationDisplay,
-                'city' => $listing->locationCity,
-                'state' => $listing->locationState,
-                'country' => $listing->locationCountry,
-                'marina' => $locationGranted ? $listing->locationMarina : null,
-                'coordinates' => $locationGranted && $listing->locationLat !== null && $listing->locationLon !== null
-                    ? ['lat' => $listing->locationLat, 'lon' => $listing->locationLon]
-                    : null,
-            ],
+            'location' => $this->location($listing, $locationGranted),
             'brokers' => [],
+        ];
+    }
+
+    /**
+     * The schema wants location: null when the node has no location data
+     * at all; when any field is set the object is emitted (and the schema
+     * then demands the non-null display anchor rather than data being
+     * silently dropped).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function location(Listing $listing, bool $locationGranted): ?array
+    {
+        $hasAny = $listing->locationDisplay !== null || $listing->locationCity !== null
+            || $listing->locationState !== null || $listing->locationCountry !== null
+            || $listing->locationMarina !== null
+            || ($listing->locationLat !== null && $listing->locationLon !== null);
+
+        if (! $hasAny) {
+            return null;
+        }
+
+        return [
+            'display' => $listing->locationDisplay,
+            'city' => $listing->locationCity,
+            'state' => $listing->locationState,
+            'country' => $listing->locationCountry,
+            'marina' => $locationGranted ? $listing->locationMarina : null,
+            'coordinates' => $locationGranted && $listing->locationLat !== null && $listing->locationLon !== null
+                ? ['lat' => $listing->locationLat, 'lon' => $listing->locationLon]
+                : null,
         ];
     }
 

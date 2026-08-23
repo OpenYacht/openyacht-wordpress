@@ -134,9 +134,7 @@ final class Services
     {
         return self::$cache[__FUNCTION__] ??= new IngestService(
             self::listingService(),
-            self::listings(),
             self::listingMedia(),
-            self::listingSerializer(),
             new ListingValidator(new BuilderRegistry(), new CategoryVocabulary()),
             new RichTextSanitizer(),
         );

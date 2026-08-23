@@ -10,6 +10,10 @@ if (! class_exists('wpdb')) {
     require_once __DIR__ . '/Support/wpdb-stub.php';
 }
 
+if (! class_exists('WP_Error')) {
+    require_once __DIR__ . '/Support/wp-error-stub.php';
+}
+
 // Points Schema::install()'s upgrade.php require at the recording dbDelta stub.
 if (! defined('ABSPATH')) {
     define('ABSPATH', __DIR__ . '/Support/');
