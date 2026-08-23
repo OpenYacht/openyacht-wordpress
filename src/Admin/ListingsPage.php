@@ -23,6 +23,7 @@ final class ListingsPage
         add_action('admin_menu', [$this, 'addMenu'], 11);
         add_action('admin_post_openyacht_listing_save', [$this, 'handleSave']);
         add_action('admin_post_openyacht_listing_transition', [$this, 'handleTransition']);
+        add_action('admin_post_openyacht_listing_bulk', [$this, 'handleBulk']);
         add_action('admin_notices', [$this, 'notices']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue']);
     }
@@ -121,9 +122,55 @@ final class ListingsPage
         echo '<a href="' . esc_url($newUrl) . '" class="page-title-action">' . esc_html__('Add New', 'openyacht') . '</a>';
         echo '<hr class="wp-header-end">';
 
+        $this->renderFilters();
+
         $table = new ListingsTable();
         $table->prepare_items();
+
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+        echo '<input type="hidden" name="action" value="openyacht_listing_bulk">';
+        wp_nonce_field('openyacht_listing_bulk');
+        echo '<div class="tablenav top"><div class="alignleft actions bulkactions">';
+        echo '<select name="target">';
+
+        foreach ([
+            'active' => __('Publish / relist', 'openyacht'),
+            'under_offer' => __('Mark under offer', 'openyacht'),
+            'sold' => __('Mark sold', 'openyacht'),
+            'withdrawn' => __('Withdraw', 'openyacht'),
+        ] as $value => $label) {
+            printf('<option value="%s">%s</option>', esc_attr($value), esc_html($label));
+        }
+
+        echo '</select> ';
+        submit_button(__('Apply', 'openyacht'), 'action', '', false);
+        echo '</div></div>';
         $table->display();
+        echo '</form>';
+    }
+
+    private function renderFilters(): void
+    {
+        $currentStatus = isset($_GET['status']) ? sanitize_key(wp_unslash($_GET['status'])) : '';
+        $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+
+        echo '<form method="get" style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+        echo '<input type="hidden" name="page" value="' . esc_attr(self::MENU_SLUG) . '">';
+        echo '<select name="status"><option value="">' . esc_html__('All statuses', 'openyacht') . '</option>';
+
+        foreach (ListingStatus::cases() as $status) {
+            printf(
+                '<option value="%s" %s>%s</option>',
+                esc_attr($status->value),
+                selected($currentStatus, $status->value, false),
+                esc_html(ucfirst(str_replace('_', ' ', $status->value))),
+            );
+        }
+
+        echo '</select>';
+        echo '<input type="search" name="s" placeholder="' . esc_attr__('Search name, builder or model…', 'openyacht') . '" value="' . esc_attr($search) . '">';
+        submit_button(__('Filter', 'openyacht'), '', '', false);
+        echo '</form>';
     }
 
     private function renderEditor(?Listing $listing): void
@@ -157,6 +204,9 @@ final class ListingsPage
         $form = new ListingForm();
         $columns = $form->columnsFromInput($input);
         $mediaRows = $form->mediaRowsFromInput($input);
+        // Alt text lives on the attachment, not the listing — apply it even
+        // when validation sends the form back, so the work is never lost.
+        $form->updateAttachmentAlts($input);
 
         if ($id > 0) {
             $listing = Services::listings()->find($id);
@@ -202,8 +252,11 @@ final class ListingsPage
 
         check_admin_referer('openyacht_listing_transition');
 
-        $listing = Services::listings()->find(isset($_POST['id']) ? (int) $_POST['id'] : 0);
-        $target = ListingStatus::tryFrom(isset($_POST['target']) ? sanitize_key(wp_unslash($_POST['target'])) : '');
+        // Row actions arrive as nonce GET links (they sit inside the bulk
+        // form, where a nested form is invalid HTML).
+        $request = array_merge($_GET, $_POST);
+        $listing = Services::listings()->find(isset($request['id']) ? (int) $request['id'] : 0);
+        $target = ListingStatus::tryFrom(isset($request['target']) ? sanitize_key(wp_unslash($request['target'])) : '');
 
         if ($listing === null || $target === null) {
             $this->redirect(['openyacht_notice' => 'missing']);
@@ -219,6 +272,46 @@ final class ListingsPage
         $this->redirect(['openyacht_notice' => 'transitioned']);
     }
 
+    /**
+     * Bulk status changes run each listing through the same lifecycle
+     * transition as the row actions, so tombstones and feed updates flow
+     * exactly as they would one at a time. Disallowed transitions are
+     * skipped and counted, never forced.
+     */
+    public function handleBulk(): void
+    {
+        if (! current_user_can('manage_options')) {
+            wp_die(esc_html__('You do not have permission to manage OpenYacht listings.', 'openyacht'));
+        }
+
+        check_admin_referer('openyacht_listing_bulk');
+
+        $target = ListingStatus::tryFrom(isset($_POST['target']) ? sanitize_key(wp_unslash($_POST['target'])) : '');
+        $ids = array_map('intval', (array) ($_POST['ids'] ?? []));
+
+        if ($target === null || $ids === []) {
+            $this->redirect(['openyacht_notice' => 'bulk_none']);
+        }
+
+        $applied = 0;
+        $skipped = 0;
+
+        foreach ($ids as $id) {
+            $listing = Services::listings()->find($id);
+
+            if ($listing === null || ! in_array($target, $listing->allowedTransitions(), true)) {
+                $skipped++;
+
+                continue;
+            }
+
+            Services::listingService()->transition($listing, $target);
+            $applied++;
+        }
+
+        $this->redirect(['openyacht_notice' => 'bulk_transitioned', 'applied' => $applied, 'skipped' => $skipped]);
+    }
+
     public function notices(): void
     {
         if (! isset($_GET['page']) || $_GET['page'] !== self::MENU_SLUG || ! isset($_GET['openyacht_notice'])) {
@@ -231,6 +324,12 @@ final class ListingsPage
             'created' => __('Listing created as a draft. Publish it from the list when it is ready — drafts are never distributed.', 'openyacht'),
             'saved' => __('Listing saved. Partners receive the change on their next poll.', 'openyacht'),
             'transitioned' => __('Status updated. Partners receive the change (or a tombstone) on their next poll.', 'openyacht'),
+            'bulk_transitioned' => sprintf(
+                /* translators: 1: number updated, 2: number skipped. */
+                __('%1$d listing(s) updated, %2$d skipped (the change was not allowed from their current status). Partners receive changes on their next poll.', 'openyacht'),
+                isset($_GET['applied']) ? (int) $_GET['applied'] : 0,
+                isset($_GET['skipped']) ? (int) $_GET['skipped'] : 0,
+            ),
         ];
 
         if (isset($success[$notice])) {
@@ -246,6 +345,7 @@ final class ListingsPage
             'invalid' => __('The listing failed validation and was not saved:', 'openyacht'),
             'invalid_transition' => __('That status change is not allowed:', 'openyacht'),
             'missing' => __('That listing no longer exists.', 'openyacht'),
+            'bulk_none' => __('Nothing to do — select at least one listing and a status.', 'openyacht'),
             default => null,
         };
 

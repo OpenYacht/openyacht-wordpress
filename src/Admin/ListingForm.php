@@ -383,7 +383,7 @@ final class ListingForm
 
                     <section id="oy-media" class="scroll-mt-16 p-6">
                         <h2 class="oy-section-h"><?php esc_html_e('Media', 'openyacht'); ?></h2>
-                        <p class="oy-section-sub mt-1"><?php esc_html_e('The profile image is the hero every partner must use. A listing with imagery needs one; with none, leave it empty — never a placeholder. Drag items to reorder; alt text and captions are edited in the media dialog.', 'openyacht'); ?></p>
+                        <p class="oy-section-sub mt-1"><?php esc_html_e('The profile image is the hero every partner must use. A listing with imagery needs one; with none, leave it empty — never a placeholder. Drag items by the handle to reorder; alt text is edited inline, captions in the media dialog.', 'openyacht'); ?></p>
                         <div class="mt-5 grid grid-cols-12 gap-x-6 gap-y-7">
                             <div class="col-span-12">
                                 <span class="oy-label"><?php esc_html_e('Profile image', 'openyacht'); ?></span>
@@ -396,10 +396,16 @@ final class ListingForm
                             </div>
 
                             <?php
-                            $this->mediaList('gallery', __('Gallery', 'openyacht'), __('Add images', 'openyacht'), __('Categorise each image so partners can group them: exterior, interior, lifestyle, crew.', 'openyacht'), $listing, $oldInput, true);
-        $this->mediaList('layout', __('Layouts & deck plans', 'openyacht'), __('Add layout images', 'openyacht'), __('GA and deck plans as images; plan PDFs belong in documents.', 'openyacht'), $listing, $oldInput, false);
-        $this->mediaList('document', __('Documents', 'openyacht'), __('Add documents', 'openyacht'), __('Brochures and plan PDFs. Shared only with partners granted the documents field group.', 'openyacht'), $listing, $oldInput, false);
+                            $this->galleryBoxes($listing, $oldInput);
         ?>
+
+                            <div class="col-span-12">
+                                <?php $this->mediaListBox('layouts', 'layouts', null, __('Layouts & deck plans', 'openyacht'), __('Add layout images', 'openyacht'), 'image', $this->itemsForKind('layout', 'layouts', $listing, $oldInput), false, __('GA and deck plans as images; plan PDFs belong in documents.', 'openyacht')); ?>
+                            </div>
+                            <div class="col-span-12">
+                                <?php $this->mediaListBox('documents', 'documents', null, __('Documents', 'openyacht'), __('Add documents', 'openyacht'), 'application/pdf', $this->itemsForKind('document', 'documents', $listing, $oldInput), true, __('Brochures and plan PDFs. Shared only with partners granted the documents field group.', 'openyacht')); ?>
+                            </div>
+        <?php ?>
 
                             <div class="col-span-6 max-[900px]:col-span-12">
                                 <span class="oy-label"><?php esc_html_e('Video links', 'openyacht'); ?></span>
@@ -461,57 +467,105 @@ final class ListingForm
     private const GALLERY_CATEGORIES = ['exterior', 'interior', 'lifestyle', 'crew'];
 
     /**
-     * One orderable media list (gallery / layouts / documents): existing
-     * items render server-side with their attachment thumbs; the JS layer
-     * adds picker items, drag-reorders (submission order = DOM order),
-     * and removes. Documents pick PDFs.
+     * The gallery as one box per wire category (plus uncategorised): the
+     * box an image sits in IS its category, ordering is local to each box,
+     * and dragging between boxes recategorises. The wire's single gallery
+     * array is the boxes concatenated in this fixed order.
      *
      * @param array<string, mixed>|null $oldInput
      */
-    private function mediaList(string $kind, string $label, string $addLabel, string $help, ?Listing $listing, ?array $oldInput, bool $withCategory): void
+    private function galleryBoxes(?Listing $listing, ?array $oldInput): void
     {
-        $inputName = ['gallery' => 'gallery', 'layout' => 'layouts', 'document' => 'documents'][$kind];
+        $grouped = array_fill_keys([...self::GALLERY_CATEGORIES, ''], []);
+
+        foreach ($this->itemsForKind('gallery', 'gallery', $listing, $oldInput) as $item) {
+            $grouped[array_key_exists($item['category'], $grouped) ? $item['category'] : ''][] = $item;
+        }
+
+        $labels = [
+            'exterior' => __('Exterior', 'openyacht'),
+            'interior' => __('Interior', 'openyacht'),
+            'lifestyle' => __('Lifestyle', 'openyacht'),
+            'crew' => __('Crew', 'openyacht'),
+            '' => __('Uncategorised', 'openyacht'),
+        ];
+
+        ?>
+        <div class="col-span-12">
+            <span class="oy-label"><?php esc_html_e('Gallery', 'openyacht'); ?></span>
+            <p class="oy-help !mt-0 mb-2.5"><?php esc_html_e('Each box is a wire category — drag between boxes to recategorise; order within a box is the order partners receive.', 'openyacht'); ?></p>
+            <div class="grid grid-cols-12 gap-x-6 gap-y-5">
+                <?php foreach ($labels as $category => $label) : ?>
+                    <div class="<?php echo $category === '' ? 'col-span-12' : 'col-span-6 max-[900px]:col-span-12'; ?>">
+                        <?php $this->mediaListBox('gallery', 'gallery-' . ($category === '' ? 'none' : $category), (string) $category, $label, __('Add images', 'openyacht'), 'image', $grouped[$category], false); ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * One orderable media box: existing items render server-side with
+     * their attachment thumbs; the JS layer adds picker items,
+     * drag-reorders (submission order = DOM order), and removes.
+     *
+     * @param list<array{id: int, category: string, alt: string}> $items
+     */
+    private function mediaListBox(string $inputName, string $listKey, ?string $category, string $label, string $addLabel, string $mediaType, array $items, bool $isDocument, ?string $help = null): void
+    {
+        ?>
+        <span class="oy-label"><?php echo esc_html($label); ?></span>
+        <?php if ($help !== null) : ?>
+            <p class="oy-help !mt-0 mb-1"><?php echo esc_html($help); ?></p>
+        <?php endif; ?>
+        <div class="mt-1.5 flex flex-col gap-1.5" data-oy-media-list="<?php echo esc_attr($listKey); ?>" data-input-name="<?php echo esc_attr($inputName); ?>" data-oy-drag-group="<?php echo esc_attr($inputName); ?>" <?php echo $category !== null ? 'data-category="' . esc_attr($category) . '"' : ''; ?> <?php echo $isDocument ? '' : 'data-with-alt="1"'; ?>>
+            <?php foreach ($items as $i => $item) : ?>
+                <?php $this->mediaItemCard($inputName, $listKey . '-' . $i, $item['id'], $category !== null ? $item['category'] : null, $isDocument, $item['alt']); ?>
+            <?php endforeach; ?>
+            <span class="oy-media-empty" data-oy-media-placeholder <?php echo $items === [] ? '' : 'style="display:none"'; ?>><?php esc_html_e('Nothing added yet', 'openyacht'); ?></span>
+        </div>
+        <button type="button" class="oy-btn oy-btn-ghost mt-2" data-oy-media-add="<?php echo esc_attr($listKey); ?>" data-media-type="<?php echo esc_attr($mediaType); ?>"><?php echo esc_html($addLabel); ?></button>
+        <?php
+    }
+
+    /**
+     * @param array<string, mixed>|null $oldInput
+     * @return list<array{id: int, category: string, alt: string}>
+     */
+    private function itemsForKind(string $kind, string $inputName, ?Listing $listing, ?array $oldInput): array
+    {
         $items = [];
 
         if ($oldInput !== null) {
             foreach ((array) ($oldInput[$inputName] ?? []) as $row) {
                 if (is_array($row) && is_numeric($row['id'] ?? null)) {
-                    $items[] = ['id' => (int) $row['id'], 'category' => (string) ($row['category'] ?? '')];
+                    $items[] = ['id' => (int) $row['id'], 'category' => (string) ($row['category'] ?? ''), 'alt' => (string) ($row['alt'] ?? '')];
                 }
             }
         } elseif ($listing !== null) {
             foreach (Services::listingMedia()->forListing($listing->id) as $media) {
                 if ($media->kind === $kind && $media->attachmentId !== null) {
-                    $items[] = ['id' => $media->attachmentId, 'category' => (string) ($media->category ?? '')];
+                    $items[] = [
+                        'id' => $media->attachmentId,
+                        'category' => (string) ($media->category ?? ''),
+                        'alt' => (string) get_post_meta($media->attachmentId, '_wp_attachment_image_alt', true),
+                    ];
                 }
             }
         }
 
-        ?>
-        <div class="col-span-12">
-            <span class="oy-label"><?php echo esc_html($label); ?></span>
-            <p class="oy-help !mt-0 mb-2.5"><?php echo esc_html($help); ?></p>
-            <div class="flex flex-col gap-1.5" data-oy-media-list="<?php echo esc_attr($inputName); ?>" <?php echo $withCategory ? 'data-with-category="1"' : ''; ?>>
-                <?php foreach ($items as $i => $item) : ?>
-                    <?php $this->mediaItemCard($inputName, (string) $i, $item['id'], $item['category'], $withCategory, $kind === 'document'); ?>
-                <?php endforeach; ?>
-                <?php if ($items === []) : ?>
-                    <span class="oy-media-empty" data-oy-media-placeholder><?php esc_html_e('Nothing added yet', 'openyacht'); ?></span>
-                <?php endif; ?>
-            </div>
-            <button type="button" class="oy-btn oy-btn-ghost mt-2" data-oy-media-add="<?php echo esc_attr($inputName); ?>" data-media-type="<?php echo esc_attr($kind === 'document' ? 'application/pdf' : 'image'); ?>"><?php echo esc_html($addLabel); ?></button>
-        </div>
-        <?php
+        return $items;
     }
 
-    private function mediaItemCard(string $inputName, string $index, int $attachmentId, string $category, bool $withCategory, bool $isDocument): void
+    private function mediaItemCard(string $inputName, string $index, int $attachmentId, ?string $category, bool $isDocument, string $alt = ''): void
     {
         $thumb = $isDocument ? null : wp_get_attachment_image_url($attachmentId, 'thumbnail');
         $title = get_the_title($attachmentId);
 
         ?>
-        <div class="oy-media-item" draggable="true" data-oy-media-item>
-            <span class="oy-drag" title="<?php esc_attr_e('Drag to reorder', 'openyacht'); ?>" aria-hidden="true">
+        <div class="oy-media-item" data-oy-media-item>
+            <span class="oy-drag" data-oy-drag-handle title="<?php esc_attr_e('Drag to reorder', 'openyacht'); ?>" aria-hidden="true">
                 <svg viewBox="0 0 8 14" width="8" height="14" fill="currentColor"><circle cx="2" cy="2" r="1.3"/><circle cx="6" cy="2" r="1.3"/><circle cx="2" cy="7" r="1.3"/><circle cx="6" cy="7" r="1.3"/><circle cx="2" cy="12" r="1.3"/><circle cx="6" cy="12" r="1.3"/></svg>
             </span>
             <?php if (is_string($thumb)) : ?>
@@ -519,14 +573,14 @@ final class ListingForm
             <?php else : ?>
                 <span class="dashicons dashicons-media-document" style="font-size:26px;width:44px;height:33px;color:var(--color-slate);display:flex;align-items:center;justify-content:center;"></span>
             <?php endif; ?>
-            <span class="oy-media-name"><?php echo esc_html($title !== '' ? $title : '#' . $attachmentId); ?></span>
-            <?php if ($withCategory) : ?>
-                <select class="oy-select !w-auto" name="oy[<?php echo esc_attr($inputName); ?>][<?php echo esc_attr($index); ?>][category]" aria-label="<?php esc_attr_e('Image category', 'openyacht'); ?>">
-                    <option value=""><?php esc_html_e('— category —', 'openyacht'); ?></option>
-                    <?php foreach (self::GALLERY_CATEGORIES as $option) : ?>
-                        <option value="<?php echo esc_attr($option); ?>" <?php selected($category, $option); ?>><?php echo esc_html(ucfirst($option)); ?></option>
-                    <?php endforeach; ?>
-                </select>
+            <span class="oy-media-body">
+                <span class="oy-media-name"><?php echo esc_html($title !== '' ? $title : '#' . $attachmentId); ?></span>
+                <?php if (! $isDocument) : ?>
+                    <input class="oy-media-alt" name="oy[<?php echo esc_attr($inputName); ?>][<?php echo esc_attr($index); ?>][alt]" value="<?php echo esc_attr($alt); ?>" placeholder="<?php esc_attr_e('Alt text', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Image alt text', 'openyacht'); ?>">
+                <?php endif; ?>
+            </span>
+            <?php if ($category !== null) : ?>
+                <input type="hidden" data-oy-category-input name="oy[<?php echo esc_attr($inputName); ?>][<?php echo esc_attr($index); ?>][category]" value="<?php echo esc_attr($category); ?>">
             <?php endif; ?>
             <input type="hidden" name="oy[<?php echo esc_attr($inputName); ?>][<?php echo esc_attr($index); ?>][id]" value="<?php echo (int) $attachmentId; ?>">
             <button type="button" class="oy-row-x" data-oy-media-remove aria-label="<?php esc_attr_e('Remove', 'openyacht'); ?>">&times;</button>
@@ -894,6 +948,31 @@ final class ListingForm
         }
 
         return array_values(array_filter($rows));
+    }
+
+    /**
+     * Alt text is attachment metadata, not wire data (gallery_item carries
+     * only a caption) — the inline fields write it back to the media
+     * library so local display and future picks both see it.
+     *
+     * @param array<string, mixed> $input
+     */
+    public function updateAttachmentAlts(array $input): void
+    {
+        foreach (['gallery', 'layouts'] as $inputName) {
+            foreach (is_array($input[$inputName] ?? null) ? $input[$inputName] : [] as $item) {
+                if (! is_array($item) || ! is_numeric($item['id'] ?? null) || ! array_key_exists('alt', $item)) {
+                    continue;
+                }
+
+                $attachmentId = (int) $item['id'];
+                $alt = sanitize_text_field((string) $item['alt']);
+
+                if ($alt !== (string) get_post_meta($attachmentId, '_wp_attachment_image_alt', true)) {
+                    update_post_meta($attachmentId, '_wp_attachment_image_alt', $alt);
+                }
+            }
+        }
     }
 
     /**

@@ -466,14 +466,38 @@
         border: 1px solid var(--color-line);
     }
 
-    .oy-media-name {
+    .oy-media-body {
         flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .oy-media-name {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
         font-size: 13px;
         color: var(--color-ink);
+    }
+
+    .oy-media-alt {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 3px 7px;
+        font-size: 12px;
+        border: 1px solid var(--color-line);
+        border-radius: 4px;
+        background: var(--color-fog);
+        color: var(--color-ink);
+    }
+
+    .oy-media-alt:focus {
+        outline: none;
+        background: #fff;
+        border-color: var(--color-line-strong);
     }
 
     /* ------ location map (Leaflet over OSM tiles) ------ */

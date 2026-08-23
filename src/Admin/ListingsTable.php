@@ -33,6 +33,7 @@ final class ListingsTable extends \WP_List_Table
     public function get_columns(): array
     {
         return [
+            'cb' => '<input type="checkbox">',
             'thumb' => '',
             'name' => __('Listing', 'openyacht'),
             'status' => __('Status', 'openyacht'),
@@ -40,6 +41,14 @@ final class ListingsTable extends \WP_List_Table
             'price' => __('Price', 'openyacht'),
             'updated' => __('Federation updated', 'openyacht'),
         ];
+    }
+
+    /**
+     * @param Listing $item
+     */
+    public function column_cb($item): string
+    {
+        return '<input type="checkbox" name="ids[]" value="' . (int) $item->id . '">';
     }
 
     /**
@@ -60,7 +69,23 @@ final class ListingsTable extends \WP_List_Table
     {
         global $wpdb;
         $table = (new \OpenYacht\Schema($wpdb))->tableName('listings');
-        $ids = array_map('intval', (array) $wpdb->get_col("SELECT id FROM {$table} ORDER BY federation_updated_at DESC LIMIT 200"));
+
+        $where = [];
+        $status = isset($_GET['status']) ? sanitize_key(wp_unslash($_GET['status'])) : '';
+
+        if (ListingStatus::tryFrom($status) !== null) {
+            $where[] = $wpdb->prepare('status = %s', $status);
+        }
+
+        $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+
+        if ($search !== '') {
+            $like = '%' . $wpdb->esc_like($search) . '%';
+            $where[] = $wpdb->prepare('(name LIKE %s OR builder_name LIKE %s OR model_name LIKE %s)', $like, $like, $like);
+        }
+
+        $whereSql = $where !== [] ? 'WHERE ' . implode(' AND ', $where) : '';
+        $ids = array_map('intval', (array) $wpdb->get_col("SELECT id FROM {$table} {$whereSql} ORDER BY federation_updated_at DESC LIMIT 200"));
         $this->items = array_values(array_filter(array_map(
             static fn (int $id) => Services::listings()->find($id),
             $ids,
@@ -157,19 +182,16 @@ final class ListingsTable extends \WP_List_Table
             'withdrawn' => __('Withdraw', 'openyacht'),
         ];
 
-        $form = '<form method="post" action="%s" style="display:inline">'
-            . '<input type="hidden" name="action" value="openyacht_listing_transition">'
-            . '<input type="hidden" name="id" value="%d">'
-            . '<input type="hidden" name="target" value="%s">'
-            . '%s<button type="submit" class="button-link">%s</button></form>';
-
-        return sprintf(
-            $form,
-            esc_url(admin_url('admin-post.php')),
-            $listing->id,
-            esc_attr($target->value),
-            wp_nonce_field('openyacht_listing_transition', '_wpnonce', true, false),
-            esc_html($labels[$target->value] ?? $target->value),
+        // Nonce GET links, not inline forms: the table now sits inside the
+        // bulk-actions form, and forms cannot nest.
+        $url = wp_nonce_url(
+            add_query_arg(
+                ['action' => 'openyacht_listing_transition', 'id' => $listing->id, 'target' => $target->value],
+                admin_url('admin-post.php'),
+            ),
+            'openyacht_listing_transition',
         );
+
+        return '<a href="' . esc_url($url) . '">' . esc_html($labels[$target->value] ?? $target->value) . '</a>';
     }
 }

@@ -1,17 +1,18 @@
 /**
- * Media handling for the listing form: a single profile image plus three
- * orderable lists (gallery with categories, layouts, documents) and two
- * external-link lists (videos, tours). Attachment IDs land in ordered
- * hidden inputs — DOM order is submission order is wire sort — and the
- * server computes the wire facts (URL, hash, dimensions, caption) at save
- * time. Alt text and captions are edited on the attachment itself, in the
- * media dialog's sidebar.
+ * Media handling for the listing form: a single profile image, the gallery
+ * as one box per wire category (drag between boxes to recategorise),
+ * orderable boxes for layouts and PDF documents, and external-link rows
+ * (videos, tours). Attachment IDs land in ordered hidden inputs — DOM
+ * order is submission order is wire sort — and the server computes the
+ * wire facts (URL, hash, dimensions, caption) at save time. Alt text is
+ * edited inline and written back to the attachment; captions are edited
+ * in the media dialog's sidebar.
  */
 (function ($) {
 	'use strict';
 
 	var counter = 5000;
-	var CATEGORIES = ['exterior', 'interior', 'lifestyle', 'crew'];
+	var dragged = null; // shared so items can move between boxes in a group
 	var DRAG_HANDLE_SVG = '<svg viewBox="0 0 8 14" width="8" height="14" fill="currentColor" aria-hidden="true"><circle cx="2" cy="2" r="1.3"/><circle cx="6" cy="2" r="1.3"/><circle cx="2" cy="7" r="1.3"/><circle cx="6" cy="7" r="1.3"/><circle cx="2" cy="12" r="1.3"/><circle cx="6" cy="12" r="1.3"/></svg>';
 
 	function thumbUrl(attachment) {
@@ -26,29 +27,38 @@
 
 	function refreshPlaceholder(list) {
 		var placeholder = list.querySelector('[data-oy-media-placeholder]');
-		var hasItems = !!list.querySelector('[data-oy-media-item]');
 		if (placeholder) {
-			placeholder.style.display = hasItems ? 'none' : '';
+			placeholder.style.display = list.querySelector('[data-oy-media-item]') ? 'none' : '';
 		}
 	}
 
-	/* ---- Orderable attachment lists ---- */
-
-	function existingIds(list) {
-		return Array.prototype.map.call(list.querySelectorAll('input[type="hidden"]'), function (input) {
-			return parseInt(input.value, 10);
-		});
+	function refreshGroup(group) {
+		document.querySelectorAll('[data-oy-drag-group="' + group + '"]').forEach(refreshPlaceholder);
 	}
 
-	function buildItem(inputName, attachment, withCategory) {
-		var index = counter++;
+	/* ---- Orderable attachment boxes ---- */
+
+	function groupIds(group) {
+		var ids = [];
+		document.querySelectorAll('[data-oy-drag-group="' + group + '"] [data-oy-media-item] input[type="hidden"][name$="[id]"]').forEach(function (input) {
+			ids.push(parseInt(input.value, 10));
+		});
+		return ids;
+	}
+
+	function buildItem(list, attachment) {
+		var inputName = list.getAttribute('data-input-name');
+		var withAlt = list.hasAttribute('data-with-alt');
+		var category = list.getAttribute('data-category'); // null when the box has no category axis
+		var index = 'js-' + (counter++);
+
 		var item = document.createElement('div');
 		item.className = 'oy-media-item';
-		item.draggable = true;
 		item.setAttribute('data-oy-media-item', '');
 
 		var handle = document.createElement('span');
 		handle.className = 'oy-drag';
+		handle.setAttribute('data-oy-drag-handle', '');
 		handle.title = 'Drag to reorder';
 		handle.setAttribute('aria-hidden', 'true');
 		handle.innerHTML = DRAG_HANDLE_SVG;
@@ -68,28 +78,37 @@
 			item.appendChild(icon);
 		}
 
+		var body = document.createElement('span');
+		body.className = 'oy-media-body';
 		var name = document.createElement('span');
 		name.className = 'oy-media-name';
 		name.textContent = attachment.title || attachment.filename || ('#' + attachment.id);
-		item.appendChild(name);
+		body.appendChild(name);
+		if (withAlt) {
+			var alt = document.createElement('input');
+			alt.className = 'oy-media-alt';
+			alt.name = 'oy[' + inputName + '][' + index + '][alt]';
+			alt.value = attachment.alt || '';
+			alt.placeholder = 'Alt text';
+			alt.setAttribute('aria-label', 'Image alt text');
+			body.appendChild(alt);
+		}
+		item.appendChild(body);
 
-		if (withCategory) {
-			var select = document.createElement('select');
-			select.className = 'oy-select !w-auto';
-			select.name = 'oy[' + inputName + '][' + index + '][category]';
-			select.setAttribute('aria-label', 'Image category');
-			select.appendChild(new Option('— category —', ''));
-			CATEGORIES.forEach(function (value) {
-				select.appendChild(new Option(value.charAt(0).toUpperCase() + value.slice(1), value));
-			});
-			item.appendChild(select);
+		if (category !== null) {
+			var categoryInput = document.createElement('input');
+			categoryInput.type = 'hidden';
+			categoryInput.setAttribute('data-oy-category-input', '');
+			categoryInput.name = 'oy[' + inputName + '][' + index + '][category]';
+			categoryInput.value = category;
+			item.appendChild(categoryInput);
 		}
 
-		var input = document.createElement('input');
-		input.type = 'hidden';
-		input.name = 'oy[' + inputName + '][' + index + '][id]';
-		input.value = attachment.id;
-		item.appendChild(input);
+		var id = document.createElement('input');
+		id.type = 'hidden';
+		id.name = 'oy[' + inputName + '][' + index + '][id]';
+		id.value = attachment.id;
+		item.appendChild(id);
 
 		var remove = document.createElement('button');
 		remove.type = 'button';
@@ -103,23 +122,22 @@
 	}
 
 	function initMediaList(list) {
-		var inputName = list.getAttribute('data-oy-media-list');
-		var withCategory = list.hasAttribute('data-with-category');
-		var addButton = document.querySelector('[data-oy-media-add="' + inputName + '"]');
-		var mediaType = addButton ? addButton.getAttribute('data-media-type') : 'image';
+		var listKey = list.getAttribute('data-oy-media-list');
+		var group = list.getAttribute('data-oy-drag-group');
+		var addButton = document.querySelector('[data-oy-media-add="' + listKey + '"]');
 
 		if (addButton) {
 			addButton.addEventListener('click', function () {
 				var frame = wp.media({
 					title: addButton.textContent.trim(),
-					library: { type: mediaType },
+					library: { type: addButton.getAttribute('data-media-type') || 'image' },
 					multiple: 'add'
 				});
 				frame.on('select', function () {
-					var present = existingIds(list);
+					var present = groupIds(group); // an image lives in one box at a time
 					frame.state().get('selection').each(function (attachment) {
 						if (present.indexOf(attachment.id) === -1) {
-							list.appendChild(buildItem(inputName, attachment.attributes, withCategory));
+							list.appendChild(buildItem(list, attachment.attributes));
 						}
 					});
 					refreshPlaceholder(list);
@@ -135,13 +153,19 @@
 			}
 		});
 
-		initDragReorder(list);
+		initDragTarget(list, group);
 	}
 
-	/* ---- Drag to reorder (DOM order = wire sort) ---- */
+	/* ---- Drag to reorder / recategorise (DOM order = wire sort) ---- */
 
-	function initDragReorder(list) {
-		var dragged = null;
+	function initDragTarget(list, group) {
+		// Dragging starts only from the handle: the card holds text inputs,
+		// and a fully draggable card breaks text selection inside them.
+		list.addEventListener('mousedown', function (event) {
+			if (event.target.closest('[data-oy-drag-handle]')) {
+				event.target.closest('[data-oy-media-item]').draggable = true;
+			}
+		});
 
 		list.addEventListener('dragstart', function (event) {
 			dragged = event.target.closest('[data-oy-media-item]');
@@ -157,28 +181,44 @@
 		list.addEventListener('dragend', function () {
 			if (dragged) {
 				dragged.classList.remove('oy-dragging');
+				dragged.draggable = false;
 				dragged = null;
 			}
+			refreshGroup(group);
 		});
 
 		list.addEventListener('dragover', function (event) {
-			if (!dragged) {
+			if (!dragged || dragged.parentElement.getAttribute('data-oy-drag-group') !== group) {
 				return;
 			}
 			event.preventDefault();
 			event.dataTransfer.dropEffect = 'move';
+
 			var over = event.target.closest('[data-oy-media-item]');
-			if (!over || over === dragged) {
+			if (over === dragged) {
 				return;
 			}
-			var rect = over.getBoundingClientRect();
-			var before = event.clientY < rect.top + rect.height / 2;
-			list.insertBefore(dragged, before ? over : over.nextSibling);
+			if (over) {
+				var rect = over.getBoundingClientRect();
+				list.insertBefore(dragged, event.clientY < rect.top + rect.height / 2 ? over : over.nextSibling);
+			} else if (dragged.parentElement !== list) {
+				list.appendChild(dragged); // dropped onto an empty box
+			}
+			syncCategory(dragged, list);
+			refreshGroup(group);
 		});
 
 		list.addEventListener('drop', function (event) {
 			event.preventDefault();
 		});
+	}
+
+	function syncCategory(item, list) {
+		var input = item.querySelector('[data-oy-category-input]');
+		var category = list.getAttribute('data-category');
+		if (input && category !== null) {
+			input.value = category;
+		}
 	}
 
 	/* ---- Profile image ---- */
@@ -215,10 +255,8 @@
 
 		if (addButton && template) {
 			addButton.addEventListener('click', function () {
-				var html = template.innerHTML.replace(/__INDEX__/g, String(counter++));
-				container.insertAdjacentHTML('beforeend', html);
-				var row = container.lastElementChild;
-				var url = row.querySelector('input[type="url"]');
+				container.insertAdjacentHTML('beforeend', template.innerHTML.replace(/__INDEX__/g, String(counter++)));
+				var url = container.lastElementChild.querySelector('input[type="url"]');
 				if (url) {
 					url.focus();
 				}
@@ -227,9 +265,8 @@
 
 		container.addEventListener('click', function (event) {
 			if (event.target.closest('[data-oy-remove-block]')) {
-				var rows = container.querySelectorAll('[data-oy-block]');
 				var row = event.target.closest('[data-oy-block]');
-				if (rows.length === 1) {
+				if (container.querySelectorAll('[data-oy-block]').length === 1) {
 					// Keep one row on screen; just blank it.
 					row.querySelectorAll('input').forEach(function (input) {
 						input.value = '';
