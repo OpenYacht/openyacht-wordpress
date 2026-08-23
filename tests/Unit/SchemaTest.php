@@ -75,7 +75,7 @@ final class SchemaTest extends TestCase
             ->andReturn(Schema::VERSION - 1);
         Functions\expect('update_option')
             ->once()
-            ->with(Schema::OPTION, Schema::VERSION, true)
+            ->with(Schema::OPTION, Schema::VERSION, false)
             ->andReturn(true);
 
         (new Schema($this->wpdb))->maybeUpgrade();

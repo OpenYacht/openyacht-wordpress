@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OpenYacht;
 
+use OpenYacht\Admin\Settings;
+
 final class Activation
 {
     public static function activate(): void
@@ -26,5 +28,14 @@ final class Activation
 
         (new Schema($wpdb))->install();
         NodeIdentity::ensure();
+
+        // No plugin option is ever autoloaded. The settings option is
+        // pre-created here so its first save through options.php inherits
+        // autoload=off instead of the add_option default.
+        add_option(Settings::OPTION, [], '', false);
+
+        foreach ([Settings::OPTION, Schema::OPTION, NodeIdentity::OPTION] as $option) {
+            wp_set_option_autoload($option, false);
+        }
     }
 }

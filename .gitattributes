@@ -1,0 +1,9 @@
+# Normalize line endings to LF everywhere — avoids CRLF churn on the
+# WSL/Windows split this plugin is developed on.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.gif binary
+*.webp binary
+*.ico binary

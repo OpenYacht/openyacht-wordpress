@@ -53,7 +53,7 @@ final class Schema
             dbDelta($sql);
         }
 
-        update_option(self::OPTION, self::VERSION, true);
+        update_option(self::OPTION, self::VERSION, false);
     }
 
     public function tableName(string $suffix): string

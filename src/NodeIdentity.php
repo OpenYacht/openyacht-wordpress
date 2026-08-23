@@ -19,7 +19,7 @@ final class NodeIdentity
 
         if (! is_string($uuid) || $uuid === '') {
             $uuid = wp_generate_uuid4();
-            update_option(self::OPTION, $uuid, true);
+            update_option(self::OPTION, $uuid, false);
         }
 
         return $uuid;
