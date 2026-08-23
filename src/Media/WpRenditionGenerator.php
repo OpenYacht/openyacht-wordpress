@@ -10,6 +10,11 @@ use RuntimeException;
  * wp_get_image_editor-backed renditions: WebP at the standard widths
  * (scale, never upscale — a narrow source just emits fewer sizes), plus
  * 16:9 cover crops of the profile image for hero use.
+ *
+ * WP quirk handled here: image_resize_dimensions() returns false when the
+ * requested size equals the source size, so same-size targets are
+ * re-encoded without a resize call, and crop targets are clamped to what
+ * the source can cover without upscaling.
  */
 final class WpRenditionGenerator implements RenditionGenerator
 {
@@ -22,6 +27,10 @@ final class WpRenditionGenerator implements RenditionGenerator
 
     public function generate(string $bytes, bool $profileCrops = false): array
     {
+        if (! function_exists('wp_tempnam')) {
+            require_once ABSPATH . 'wp-admin/includes/file.php'; // wp_tempnam is admin-only; CLI/cron contexts don't load it.
+        }
+
         $source = (string) wp_tempnam('openyacht-source');
 
         if ($source === '' || file_put_contents($source, $bytes) === false) {
@@ -29,37 +38,18 @@ final class WpRenditionGenerator implements RenditionGenerator
         }
 
         try {
-            $probe = wp_get_image_editor($source);
-
-            if (is_wp_error($probe)) {
-                throw new RuntimeException('No usable image editor: ' . $probe->get_error_message());
-            }
-
-            $sourceSize = $probe->get_size();
-            $sourceWidth = (int) ($sourceSize['width'] ?? 0);
             $manifest = [];
             $emitted = [];
 
             foreach (self::WIDTHS as $width) {
-                $target = min($width, $sourceWidth);
-
-                if ($target < 1 || in_array($target, $emitted, true)) {
-                    continue;
-                }
-
-                $emitted[] = $target;
-                $manifest["w{$width}"] = $this->render($source, $target, null, false);
+                $this->add($manifest, $emitted, "w{$width}", $this->render($source, $width, false));
             }
 
             if ($profileCrops) {
+                $emittedCrops = [];
+
                 foreach (self::WIDTHS as $width) {
-                    $target = min($width, $sourceWidth);
-
-                    if ($target < 1) {
-                        continue;
-                    }
-
-                    $manifest["crop_{$width}"] = $this->render($source, $target, (int) round($target / self::CROP_RATIO), true);
+                    $this->add($manifest, $emittedCrops, "crop_{$width}", $this->render($source, $width, true));
                 }
             }
 
@@ -70,9 +60,31 @@ final class WpRenditionGenerator implements RenditionGenerator
     }
 
     /**
+     * Deduplicate: a narrow source clamps several requested widths to the
+     * same output; keep only the first.
+     *
+     * @param array<string, array{path: string, width: int, height: int}> $manifest
+     * @param list<string> $emitted
+     * @param array{path: string, width: int, height: int} $rendition
+     */
+    private function add(array &$manifest, array &$emitted, string $key, array $rendition): void
+    {
+        $dimensions = $rendition['width'] . 'x' . $rendition['height'];
+
+        if (in_array($dimensions, $emitted, true)) {
+            @unlink($rendition['path']);
+
+            return;
+        }
+
+        $emitted[] = $dimensions;
+        $manifest[$key] = $rendition;
+    }
+
+    /**
      * @return array{path: string, width: int, height: int}
      */
-    private function render(string $source, int $width, ?int $height, bool $crop): array
+    private function render(string $source, int $width, bool $crop): array
     {
         $editor = wp_get_image_editor($source);
 
@@ -80,10 +92,31 @@ final class WpRenditionGenerator implements RenditionGenerator
             throw new RuntimeException('No usable image editor: ' . $editor->get_error_message());
         }
 
-        $resized = $editor->resize($width, $height, $crop);
+        $size = $editor->get_size();
+        $sourceWidth = (int) ($size['width'] ?? 0);
+        $sourceHeight = (int) ($size['height'] ?? 0);
 
-        if (is_wp_error($resized)) {
-            throw new RuntimeException('Resize failed: ' . $resized->get_error_message());
+        if ($sourceWidth < 1 || $sourceHeight < 1) {
+            throw new RuntimeException('Could not read source image dimensions.');
+        }
+
+        if ($crop) {
+            // Clamp to what the source covers without upscaling.
+            $width = min($width, $sourceWidth, (int) floor($sourceHeight * self::CROP_RATIO));
+            $height = min((int) round($width / self::CROP_RATIO), $sourceHeight);
+        } else {
+            $width = min($width, $sourceWidth);
+            $height = null;
+        }
+
+        $isSourceSize = $width === $sourceWidth && ($height === null || $height === $sourceHeight);
+
+        if (! $isSourceSize) {
+            $resized = $editor->resize($width, $height, $crop);
+
+            if (is_wp_error($resized)) {
+                throw new RuntimeException('Resize failed: ' . $resized->get_error_message());
+            }
         }
 
         $editor->set_quality(self::QUALITY);

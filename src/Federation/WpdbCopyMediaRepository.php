@@ -16,7 +16,7 @@ final class WpdbCopyMediaRepository implements CopyMediaRepository
     {
         $rows = $this->wpdb->get_results(
             $this->wpdb->prepare(
-                "SELECT * FROM {$this->table()} WHERE copy_id = %d ORDER BY kind, sort",
+                "SELECT * FROM {$this->table()} WHERE copy_id = %d ORDER BY kind = 'profile' DESC, sort",
                 $copyId,
             ),
             'ARRAY_A',
