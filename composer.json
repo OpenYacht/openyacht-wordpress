@@ -1,0 +1,46 @@
+{
+    "name": "openyacht/openyacht",
+    "description": "OpenYacht node for WordPress — turns a WordPress site into a federated yacht-listing node.",
+    "type": "wordpress-plugin",
+    "license": "AGPL-3.0-only",
+    "homepage": "https://openyacht.org",
+    "require": {
+        "php": ">=8.1",
+        "ext-json": "*",
+        "ext-sodium": "*",
+        "opis/json-schema": "^2.4"
+    },
+    "require-dev": {
+        "brain/monkey": "^2.6",
+        "friendsofphp/php-cs-fixer": "^3.64",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan": "^2.0",
+        "phpunit/phpunit": "^11.5",
+        "szepeviktor/phpstan-wordpress": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "OpenYacht\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "OpenYacht\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "phpstan/extension-installer": true
+        },
+        "sort-packages": true
+    },
+    "scripts": {
+        "test": "phpunit",
+        "stan": "phpstan analyse",
+        "fix": "php-cs-fixer fix",
+        "check": [
+            "@test",
+            "@stan"
+        ]
+    }
+}

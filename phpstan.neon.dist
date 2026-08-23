@@ -1,0 +1,7 @@
+parameters:
+    level: 6
+    paths:
+        - src
+        - openyacht.php
+        - uninstall.php
+    treatPhpDocTypesAsCertain: false
