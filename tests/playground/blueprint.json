@@ -1,0 +1,19 @@
+{
+    "$schema": "https://playground.wordpress.net/blueprint-schema.json",
+    "steps": [
+        {
+            "step": "defineWpConfigConsts",
+            "consts": {
+                "OPENYACHT_ALLOW_INSECURE_HTTP": true
+            }
+        },
+        {
+            "step": "activatePlugin",
+            "pluginPath": "/wordpress/wp-content/plugins/openyacht/openyacht.php"
+        },
+        {
+            "step": "runPHP",
+            "code": "<?php require '/wordpress/wp-load.php'; global $wpdb; $failures = []; if (! is_plugin_active('openyacht/openyacht.php')) { $failures[] = 'plugin not active'; } foreach (\\OpenYacht\\Schema::TABLE_SUFFIXES as $suffix) { $table = $wpdb->prefix . 'openyacht_' . $suffix; $wpdb->last_error = ''; $count = $wpdb->get_var(\"SELECT COUNT(*) FROM {$table}\"); if ($wpdb->last_error !== '' || $count === null) { $failures[] = \"table {$table}: {$wpdb->last_error}\"; } } if ((int) get_option('openyacht_schema_version') < 1) { $failures[] = 'schema version option missing'; } if (! preg_match('/^[0-9a-f-]{36}$/', (string) get_option('openyacht_node_uuid'))) { $failures[] = 'node uuid missing'; } $result = $failures === [] ? \"PLAYGROUND-CHECK-OK\\n\" : \"PLAYGROUND-CHECK-FAIL\\n\" . implode(\"\\n\", $failures) . \"\\n\"; file_put_contents('/wordpress/wp-content/plugins/openyacht/.playground-check-result', $result); echo $result;"
+        }
+    ]
+}
