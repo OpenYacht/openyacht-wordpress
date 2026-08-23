@@ -184,6 +184,24 @@ final class SharingFeedTest extends TestCase
         self::assertSame(200, $forB['status']);
     }
 
+    #[Group('API-4')]
+    public function testGrantsChangeResendsTheWholeFeedToThatPartnerOnly(): void
+    {
+        $this->seedListing('ALPHA', '2026-08-01 10:00:00');
+        $this->seedListing('BETA', '2026-08-02 10:00:00');
+        $watermark = '2026-08-10T00:00:00Z'; // both listings are older than this
+
+        self::assertCount(0, $this->feed($this->partnerA, $watermark), 'nothing changed yet');
+
+        $refreshed = $this->sharing->refreshPartnerFeed($this->partnerA->id, 'grants changed');
+
+        self::assertSame(2, $refreshed);
+        $feedA = $this->feed($this->partnerA, $watermark);
+        self::assertCount(2, $feedA, 'the re-gated payloads resend to the affected partner');
+        self::assertArrayNotHasKey('tombstone', $feedA[0]);
+        self::assertCount(0, $this->feed($this->partnerB, $watermark), 'other partners see no churn');
+    }
+
     public function testAudienceChangeWithoutEffectRecordsNoEvents(): void
     {
         $listing = $this->seedListing('NO-OP');

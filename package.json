@@ -1,0 +1,16 @@
+{
+    "name": "openyacht-admin-styles",
+    "private": true,
+    "description": "Build tooling for the OpenYacht custom admin surfaces (Tailwind v4, purged against the PHP templates).",
+    "scripts": {
+        "build": "tailwindcss -i assets/admin/editor.src.css -o assets/admin/editor.css --minify",
+        "watch": "tailwindcss -i assets/admin/editor.src.css -o assets/admin/editor.css --watch"
+    },
+    "devDependencies": {
+        "@tailwindcss/cli": "^4.0.0",
+        "tailwindcss": "^4.0.0"
+    },
+    "dependencies": {
+        "leaflet": "^1.9.4"
+    }
+}

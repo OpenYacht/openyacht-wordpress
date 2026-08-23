@@ -28,6 +28,31 @@ final class SharingService
     ) {
     }
 
+    /**
+     * A partner's served view changed wholesale (its field-group grants):
+     * lift every visible listing's effective timestamp for that partner so
+     * its next poll picks up the re-gated payloads instead of waiting for
+     * the next content change (API-4).
+     *
+     * @return int listings refreshed
+     */
+    public function refreshPartnerFeed(int $partnerId, string $reason = 'grants changed'): int
+    {
+        $now = gmdate('Y-m-d H:i:s');
+        $refreshed = 0;
+
+        foreach ($this->listings->feedPage($partnerId, null, null, PHP_INT_MAX - 1) as $item) {
+            $this->events->append($item->listing->id, $partnerId, VisibilityEventRepository::REFRESHED, $now);
+            $refreshed++;
+        }
+
+        if ($refreshed > 0) {
+            $this->logger->log('sharing', "Feed refreshed for partner #{$partnerId} ({$reason}): {$refreshed} listing(s) will resend", 'feed_refreshed');
+        }
+
+        return $refreshed;
+    }
+
     public function isVisibleTo(Listing $listing, int $partnerId): bool
     {
         return match ($listing->audience) {

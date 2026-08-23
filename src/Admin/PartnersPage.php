@@ -85,6 +85,9 @@ final class PartnersPage
                         'field_groups' => count($groups) === count(\OpenYacht\Federation\FieldGroup::cases()) ? null : $groups,
                     ]);
                     Services::logger()->log('partner', "Field-group grants for {$partner->domain} set to [" . implode(', ', $groups) . ']', 'grants_changed', $partner->id);
+                    // The partner's whole served view changed: resend it on
+                    // their next poll rather than waiting for content churn.
+                    Services::sharingService()->refreshPartnerFeed($partner->id, "grants changed for {$partner->domain}");
                     $notice = 'grants';
                     break;
                 case 'approve':

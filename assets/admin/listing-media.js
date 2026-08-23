@@ -10,7 +10,7 @@
 		var url = attachment.sizes && attachment.sizes.thumbnail
 			? attachment.sizes.thumbnail.url
 			: attachment.url;
-		return '<img src="' + url + '" style="width:80px;height:80px;object-fit:cover;border:1px solid #c3c4c7;border-radius:2px;" alt="">';
+		return '<img src="' + url + '" class="oy-thumb" alt="">';
 	}
 
 	function renderPreviewByIds(containerId, ids) {

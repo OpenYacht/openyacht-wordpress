@@ -53,6 +53,32 @@ final class ListingsPage
             OPENYACHT_VERSION,
             true,
         );
+        wp_enqueue_style(
+            'openyacht-leaflet',
+            plugins_url('assets/vendor/leaflet/leaflet.css', OPENYACHT_FILE),
+            [],
+            '1.9.4',
+        );
+        wp_enqueue_script(
+            'openyacht-leaflet',
+            plugins_url('assets/vendor/leaflet/leaflet.js', OPENYACHT_FILE),
+            [],
+            '1.9.4',
+            true,
+        );
+        wp_enqueue_style(
+            'openyacht-editor',
+            plugins_url('assets/admin/editor.css', OPENYACHT_FILE),
+            ['openyacht-leaflet'],
+            OPENYACHT_VERSION,
+        );
+        wp_enqueue_script(
+            'openyacht-editor',
+            plugins_url('assets/admin/editor.js', OPENYACHT_FILE),
+            ['openyacht-leaflet'],
+            OPENYACHT_VERSION,
+            true,
+        );
     }
 
     public function renderPage(): void
@@ -101,20 +127,18 @@ final class ListingsPage
 
     private function renderEditor(?Listing $listing): void
     {
+        // The custom editor carries its own title in the rail; a
+        // screen-reader h1 + wp-header-end keeps admin notices anchored.
         $title = $listing === null
             ? __('Add Listing', 'openyacht')
             : sprintf(
-                /* translators: 1: listing name, 2: status. */
-                __('Edit: %1$s (%2$s)', 'openyacht'),
+                /* translators: %s: listing name. */
+                __('Edit listing: %s', 'openyacht'),
                 $listing->name ?? '(unnamed)',
-                str_replace('_', ' ', $listing->status->value),
             );
 
-        echo '<h1>' . esc_html($title) . '</h1>';
-
-        if ($listing !== null) {
-            echo '<p><code>' . esc_html($listing->canonicalUri()) . '</code></p>';
-        }
+        echo '<h1 class="screen-reader-text">' . esc_html($title) . '</h1>';
+        echo '<hr class="wp-header-end" style="border:0;margin:0;">';
 
         (new ListingForm())->render($listing, $this->oldInput());
     }

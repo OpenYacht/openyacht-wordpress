@@ -12,10 +12,11 @@ use OpenYacht\Federation\RichTextSanitizer;
 use OpenYacht\Services;
 
 /**
- * The authoring form: real fields with input-time validation — required
- * fields, closed enums as selects, the vendored builder registry as a
- * fixed choice list with an explicit "unlisted" escape hatch. Native WP
- * admin styling throughout.
+ * The yacht listing editor — the plugin's first custom-styled admin
+ * surface ("quiet nautical": calm fog ground, white sheet, deep navy ink,
+ * one brass accent). A sticky rail navigates the grouped sections; long
+ * registries (358 builders) are searchable comboboxes; gated fields carry
+ * a key chip naming their field group.
  *
  * Submissions parse into the same column map + media rows every other
  * entry path uses; IngestService validates the candidate wire view before
@@ -50,6 +51,437 @@ final class ListingForm
             return $oldInput !== null ? ! empty($oldInput[$key]) : $fromListing;
         };
 
+        [$profileId, $galleryCsv] = $this->mediaState($listing, $oldInput);
+        $currentAudience = $oldInput !== null
+            ? (string) ($oldInput['audience'] ?? 'everyone')
+            : ($listing?->audience->value ?? 'everyone');
+        $selectedIds = $oldInput !== null
+            ? array_map('intval', (array) ($oldInput['audience_partners'] ?? []))
+            : ($listing !== null ? Services::audience()->partnersForListing($listing->id) : []);
+
+        $sections = [
+            'oy-identity' => __('Identity', 'openyacht'),
+            'oy-vessel' => __('Vessel', 'openyacht'),
+            'oy-price' => __('Price', 'openyacht'),
+            'oy-location' => __('Location', 'openyacht'),
+            'oy-specs' => __('Specifications', 'openyacht'),
+            'oy-description' => __('Description', 'openyacht'),
+            'oy-media' => __('Media', 'openyacht'),
+            'oy-sharing' => __('Sharing', 'openyacht'),
+        ];
+
+        ?>
+        <div id="openyacht-editor" class="mt-4">
+        <!--
+        THESIS: a vessel's specification sheet, not a settings page — one calm document the broker completes, with a rail that always knows where you are. Refuses the wp-admin form-table monolith.
+        OWN-WORLD: fog ground #eef2f5, white sheet, deep navy ink #142b40, slate-tinted secondaries, one brass accent #a57b2a spent only on required marks and the rail's position dot; hairline navy-tinted rules; searchable registry comboboxes with muted country hints.
+        STORY: the broker sees the whole listing at a glance, jumps by section, knows what is required and what partners will see, and saves from anywhere.
+        FIRST VIEWPORT: sticky rail left (name, status chip, section list, Save), the sheet right opening on Identity; brass dot marks the live section.
+        FORM: user-pinned direction (quiet nautical, sections + sticky rail); no seed roll.
+        FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
+        -->
+        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+            <input type="hidden" name="action" value="openyacht_listing_save">
+            <?php if ($listing !== null) : ?>
+                <input type="hidden" name="id" value="<?php echo (int) $listing->id; ?>">
+            <?php endif; ?>
+            <?php wp_nonce_field('openyacht_listing_save'); ?>
+
+            <div class="oy-mobilebar">
+                <p class="oy-title"><?php echo esc_html($listing->name ?? __('New listing', 'openyacht')); ?></p>
+                <span class="oy-chip oy-chip-status <?php echo $listing?->status->value === 'active' ? 'is-active' : ''; ?>">
+                    <?php echo esc_html(str_replace('_', ' ', $listing?->status->value ?? 'draft')); ?>
+                </span>
+            </div>
+
+            <div class="flex items-start gap-6">
+                <aside class="oy-rail-sticky sticky top-12 w-56 shrink-0 max-[900px]:hidden">
+                    <p class="oy-title"><?php echo esc_html($listing->name ?? __('New listing', 'openyacht')); ?></p>
+                    <div class="mt-2 flex items-center gap-2">
+                        <span class="oy-chip oy-chip-status <?php echo $listing?->status->value === 'active' ? 'is-active' : ''; ?>">
+                            <?php echo esc_html(str_replace('_', ' ', $listing?->status->value ?? 'draft')); ?>
+                        </span>
+                    </div>
+
+                    <nav class="mt-5 flex flex-col gap-0.5" aria-label="<?php esc_attr_e('Listing sections', 'openyacht'); ?>">
+                        <?php foreach ($sections as $id => $label) : ?>
+                            <a class="oy-rail-link" href="#<?php echo esc_attr($id); ?>"><?php echo esc_html($label); ?></a>
+                        <?php endforeach; ?>
+                    </nav>
+
+                    <div class="mt-6 flex flex-col gap-2">
+                        <button type="submit" class="oy-btn oy-btn-primary w-full">
+                            <?php echo esc_html($listing === null ? __('Create draft', 'openyacht') : __('Save changes', 'openyacht')); ?>
+                        </button>
+                        <a class="oy-btn oy-btn-ghost w-full" href="<?php echo esc_url(add_query_arg(['page' => ListingsPage::MENU_SLUG], admin_url('admin.php'))); ?>">
+                            <?php esc_html_e('Back to listings', 'openyacht'); ?>
+                        </a>
+                    </div>
+                    <?php if ($listing === null) : ?>
+                        <p class="oy-help mt-3"><?php esc_html_e('New listings start as drafts. Drafts are never distributed — publish from the listings screen when ready.', 'openyacht'); ?></p>
+                    <?php endif; ?>
+                </aside>
+
+                <div class="oy-sheet min-w-0 max-w-3xl flex-1">
+                    <section id="oy-identity" class="scroll-mt-16 p-6">
+                        <h2 class="oy-section-h"><?php esc_html_e('Identity', 'openyacht'); ?></h2>
+                        <p class="oy-section-sub mt-1"><?php esc_html_e('How this listing introduces itself to every partner.', 'openyacht'); ?></p>
+                        <div class="mt-5 grid grid-cols-12 gap-x-5 gap-y-5">
+                            <div class="col-span-8 max-[900px]:col-span-12">
+                                <label class="oy-label" for="oy_name"><?php esc_html_e('Listing name', 'openyacht'); ?><span class="oy-req" aria-hidden="true"></span><span class="screen-reader-text"> (<?php esc_html_e('required', 'openyacht'); ?>)</span></label>
+                                <input class="oy-input" name="oy[name]" id="oy_name" type="text" value="<?php echo esc_attr($v('name', $listing?->name)); ?>" required>
+                            </div>
+                            <div class="col-span-4 max-[900px]:col-span-12">
+                                <label class="oy-label" for="oy_condition"><?php esc_html_e('Condition', 'openyacht'); ?></label>
+                                <select class="oy-select" name="oy[condition]" id="oy_condition">
+                                    <?php foreach (['' => '—', 'new' => __('New', 'openyacht'), 'used' => __('Used', 'openyacht')] as $value => $label) : ?>
+                                        <option value="<?php echo esc_attr((string) $value); ?>" <?php selected($v('condition', $listing?->condition), (string) $value); ?>><?php echo esc_html($label); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-span-12">
+                                <label class="oy-label" for="oy_summary"><?php esc_html_e('Summary', 'openyacht'); ?></label>
+                                <textarea class="oy-textarea" name="oy[summary]" id="oy_summary" rows="3" placeholder="<?php esc_attr_e('One plain-text paragraph a partner can quote.', 'openyacht'); ?>"><?php echo esc_textarea($v('summary', $listing?->summary)); ?></textarea>
+                            </div>
+                        </div>
+                    </section>
+                    <hr class="oy-rule">
+
+                    <section id="oy-vessel" class="scroll-mt-16 p-6">
+                        <h2 class="oy-section-h"><?php esc_html_e('Vessel', 'openyacht'); ?></h2>
+                        <div class="mt-5 grid grid-cols-12 gap-x-5 gap-y-5">
+                            <div class="col-span-6 max-[900px]:col-span-12">
+                                <label class="oy-label" for="oy_builder"><?php esc_html_e('Builder', 'openyacht'); ?></label>
+                                <?php $this->builderCombobox($v('builder_slug', $listing?->builderSlug)); ?>
+                                <p class="oy-help"><?php esc_html_e('Search the shared registry. Registry builders travel with their slug; anything else goes in the unlisted field.', 'openyacht'); ?></p>
+                                <div class="mt-3" data-oy-unlisted-builder <?php echo $v('builder_slug', $listing?->builderSlug) !== '' ? 'hidden' : ''; ?>>
+                                    <label class="oy-label" for="oy_builder_name"><?php esc_html_e('Unlisted builder', 'openyacht'); ?></label>
+                                    <input class="oy-input" name="oy[builder_name]" id="oy_builder_name" type="text" placeholder="<?php esc_attr_e('Only for builders the registry does not list', 'openyacht'); ?>" value="<?php echo esc_attr($v('builder_name', $listing?->builderSlug !== null ? null : $listing?->builderName)); ?>">
+                                </div>
+                            </div>
+                            <div class="col-span-6 max-[900px]:col-span-12">
+                                <label class="oy-label" for="oy_model_name"><?php esc_html_e('Model', 'openyacht'); ?></label>
+                                <input class="oy-input" name="oy[model_name]" id="oy_model_name" type="text" value="<?php echo esc_attr($v('model_name', $listing?->modelName)); ?>">
+                            </div>
+                            <div class="col-span-2 max-[900px]:col-span-4">
+                                <label class="oy-label" for="oy_year_built"><?php esc_html_e('Built', 'openyacht'); ?></label>
+                                <input class="oy-input oy-num" name="oy[year_built]" id="oy_year_built" type="number" min="1800" max="2100" value="<?php echo esc_attr($v('year_built', $listing?->yearBuilt)); ?>">
+                            </div>
+                            <div class="col-span-2 max-[900px]:col-span-4">
+                                <label class="oy-label" for="oy_refit_year"><?php esc_html_e('Refit', 'openyacht'); ?></label>
+                                <input class="oy-input oy-num" name="oy[refit_year]" id="oy_refit_year" type="number" min="1800" max="2100" value="<?php echo esc_attr($v('refit_year', $listing?->refitYear)); ?>">
+                            </div>
+                            <div class="col-span-2 max-[900px]:col-span-4">
+                                <label class="oy-label" for="oy_loa_m"><?php esc_html_e('LOA (m)', 'openyacht'); ?></label>
+                                <input class="oy-input oy-num" name="oy[loa_m]" id="oy_loa_m" type="number" step="0.01" min="0" value="<?php echo esc_attr($v('loa_m', $listing?->loaM)); ?>">
+                            </div>
+                            <div class="col-span-12">
+                                <label class="oy-label" for="oy_previous_names"><?php esc_html_e('Previous names', 'openyacht'); ?></label>
+                                <input class="oy-input" name="oy[previous_names]" id="oy_previous_names" type="text" placeholder="<?php esc_attr_e('Comma-separated', 'openyacht'); ?>" value="<?php echo esc_attr($v('previous_names', $listing !== null ? implode(', ', $listing->previousNames) : null)); ?>">
+                            </div>
+
+                            <div class="col-span-12 mt-1 flex items-center gap-2.5">
+                                <h3 class="oy-label !mb-0"><?php esc_html_e('Registered identifiers', 'openyacht'); ?></h3>
+                                <?php $this->gatedChip(__('Trusted partners only', 'openyacht')); ?>
+                            </div>
+                            <div class="col-span-4 max-[900px]:col-span-6">
+                                <label class="oy-label" for="oy_hin">HIN</label>
+                                <input class="oy-input oy-num" name="oy[hin]" id="oy_hin" type="text" value="<?php echo esc_attr($v('hin', $listing?->hin)); ?>">
+                            </div>
+                            <div class="col-span-2 max-[900px]:col-span-6">
+                                <label class="oy-label" for="oy_imo">IMO</label>
+                                <input class="oy-input oy-num" name="oy[imo]" id="oy_imo" type="text" value="<?php echo esc_attr($v('imo', $listing?->imo)); ?>">
+                            </div>
+                            <div class="col-span-3 max-[900px]:col-span-6">
+                                <label class="oy-label" for="oy_mmsi">MMSI</label>
+                                <input class="oy-input oy-num" name="oy[mmsi]" id="oy_mmsi" type="text" value="<?php echo esc_attr($v('mmsi', $listing?->mmsi)); ?>">
+                            </div>
+                            <div class="col-span-3 max-[900px]:col-span-6">
+                                <label class="oy-label" for="oy_official_number"><?php esc_html_e('Official no.', 'openyacht'); ?></label>
+                                <input class="oy-input oy-num" name="oy[official_number]" id="oy_official_number" type="text" value="<?php echo esc_attr($v('official_number', $listing?->officialNumber)); ?>">
+                            </div>
+                        </div>
+                    </section>
+                    <hr class="oy-rule">
+
+                    <section id="oy-price" class="scroll-mt-16 p-6">
+                        <h2 class="oy-section-h"><?php esc_html_e('Price', 'openyacht'); ?></h2>
+                        <p class="oy-section-sub mt-1"><?php esc_html_e('Every change appends to the public price history — it never rewrites it.', 'openyacht'); ?></p>
+                        <div class="mt-5 grid grid-cols-12 gap-x-5 gap-y-4">
+                            <div class="col-span-2 max-[900px]:col-span-4">
+                                <label class="oy-label" for="oy_price_currency"><?php esc_html_e('Currency', 'openyacht'); ?></label>
+                                <select class="oy-select" name="oy[price_currency]" id="oy_price_currency">
+                                    <option value=""></option>
+                                    <?php foreach (self::CURRENCIES as $currency) : ?>
+                                        <option value="<?php echo esc_attr($currency); ?>" <?php selected($v('price_currency', $listing?->priceCurrency), $currency); ?>><?php echo esc_html($currency); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="col-span-4 max-[900px]:col-span-8">
+                                <label class="oy-label" for="oy_price_amount"><?php esc_html_e('Asking price', 'openyacht'); ?></label>
+                                <input class="oy-input oy-num" name="oy[price_amount]" id="oy_price_amount" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="12500000" value="<?php echo esc_attr($v('price_amount', $listing?->priceAmount)); ?>">
+                            </div>
+                            <div class="col-span-6 max-[900px]:col-span-12 flex flex-col justify-end gap-2">
+                                <label class="oy-check"><input name="oy[price_on_application]" type="checkbox" value="1" <?php checked($checked('price_on_application', $listing->priceOnApplication ?? false)); ?>><span><?php esc_html_e('Price on application — the amount never leaves this site', 'openyacht'); ?></span></label>
+                                <label class="oy-check"><input name="oy[starting_price]" type="checkbox" value="1" <?php checked($checked('starting_price', $listing->startingPrice ?? false)); ?>><span><?php esc_html_e('Starting price (new builds)', 'openyacht'); ?></span></label>
+                            </div>
+                        </div>
+                    </section>
+                    <hr class="oy-rule">
+
+                    <section id="oy-location" class="scroll-mt-16 p-6">
+                        <h2 class="oy-section-h"><?php esc_html_e('Location', 'openyacht'); ?></h2>
+                        <div class="mt-5 grid grid-cols-12 gap-x-5 gap-y-5">
+                            <div class="col-span-6 max-[900px]:col-span-12">
+                                <label class="oy-label" for="oy_location_display"><?php esc_html_e('Display location', 'openyacht'); ?></label>
+                                <input class="oy-input" name="oy[location_display]" id="oy_location_display" type="text" placeholder="<?php esc_attr_e('e.g. French Riviera', 'openyacht'); ?>" value="<?php echo esc_attr($v('location_display', $listing?->locationDisplay)); ?>">
+                                <p class="oy-help"><?php esc_html_e('What every partner sees. Required whenever any location detail is set.', 'openyacht'); ?></p>
+                            </div>
+                            <div class="col-span-3 max-[900px]:col-span-5">
+                                <label class="oy-label" for="oy_location_city"><?php esc_html_e('City', 'openyacht'); ?></label>
+                                <input class="oy-input" name="oy[location_city]" id="oy_location_city" type="text" value="<?php echo esc_attr($v('location_city', $listing?->locationCity)); ?>">
+                            </div>
+                            <div class="col-span-3 max-[900px]:col-span-4">
+                                <label class="oy-label" for="oy_location_state"><?php esc_html_e('State', 'openyacht'); ?></label>
+                                <input class="oy-input" name="oy[location_state]" id="oy_location_state" type="text" value="<?php echo esc_attr($v('location_state', $listing?->locationState)); ?>">
+                            </div>
+                            <div class="col-span-2 max-[900px]:col-span-3">
+                                <label class="oy-label" for="oy_location_country"><?php esc_html_e('Country', 'openyacht'); ?></label>
+                                <input class="oy-input" name="oy[location_country]" id="oy_location_country" type="text" maxlength="2" placeholder="FR" value="<?php echo esc_attr($v('location_country', $listing?->locationCountry)); ?>">
+                            </div>
+
+                            <div class="col-span-12 mt-1 flex items-center gap-2.5">
+                                <h3 class="oy-label !mb-0"><?php esc_html_e('Exact position', 'openyacht'); ?></h3>
+                                <?php $this->gatedChip(__('Trusted partners only', 'openyacht')); ?>
+                            </div>
+                            <div class="col-span-6 max-[900px]:col-span-12">
+                                <label class="oy-label" for="oy_location_marina"><?php esc_html_e('Marina', 'openyacht'); ?></label>
+                                <input class="oy-input" name="oy[location_marina]" id="oy_location_marina" type="text" value="<?php echo esc_attr($v('location_marina', $listing?->locationMarina)); ?>">
+                            </div>
+                            <div class="col-span-3 max-[900px]:col-span-6">
+                                <label class="oy-label" for="oy_location_lat"><?php esc_html_e('Latitude', 'openyacht'); ?></label>
+                                <input class="oy-input oy-num" name="oy[location_lat]" id="oy_location_lat" type="number" step="any" value="<?php echo esc_attr($v('location_lat', $listing?->locationLat)); ?>">
+                            </div>
+                            <div class="col-span-3 max-[900px]:col-span-6">
+                                <label class="oy-label" for="oy_location_lon"><?php esc_html_e('Longitude', 'openyacht'); ?></label>
+                                <input class="oy-input oy-num" name="oy[location_lon]" id="oy_location_lon" type="number" step="any" value="<?php echo esc_attr($v('location_lon', $listing?->locationLon)); ?>">
+                            </div>
+                            <div class="col-span-12">
+                                <div class="oy-combobox mb-2 flex gap-2" data-oy-map-search>
+                                    <input type="text" class="oy-input" id="oy_map_search" placeholder="<?php esc_attr_e('Search a place — marina, town, bay…', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Search the map', 'openyacht'); ?>" autocomplete="off">
+                                    <button type="button" class="oy-btn oy-btn-ghost shrink-0" id="oy_map_search_go"><?php esc_html_e('Find', 'openyacht'); ?></button>
+                                    <ul class="oy-combobox-list" role="listbox" aria-label="<?php esc_attr_e('Places', 'openyacht'); ?>" hidden></ul>
+                                </div>
+                                <div id="oy_map" class="oy-map" data-lat="<?php echo esc_attr($v('location_lat', $listing?->locationLat)); ?>" data-lon="<?php echo esc_attr($v('location_lon', $listing?->locationLon)); ?>"></div>
+                                <p class="oy-help"><?php esc_html_e('Search to jump somewhere, then click the map to set the exact position; drag the marker to adjust. Clearing the coordinate fields removes it.', 'openyacht'); ?></p>
+                            </div>
+                        </div>
+                    </section>
+                    <hr class="oy-rule">
+
+                    <section id="oy-specs" class="scroll-mt-16 p-6">
+                        <h2 class="oy-section-h"><?php esc_html_e('Specifications', 'openyacht'); ?></h2>
+                        <p class="oy-section-sub mt-1"><?php esc_html_e('Metric only — the wire carries no imperial units. Anything left blank travels as unknown.', 'openyacht'); ?></p>
+                        <div class="mt-5 grid grid-cols-12 gap-x-5 gap-y-5">
+                            <div class="col-span-3 max-[900px]:col-span-6">
+                                <label class="oy-label" for="oy_power_or_sail"><?php esc_html_e('Power or sail', 'openyacht'); ?><span class="oy-req" aria-hidden="true"></span><span class="screen-reader-text"> (<?php esc_html_e('required', 'openyacht'); ?>)</span></label>
+                                <select class="oy-select" name="oy[spec][power_or_sail]" id="oy_power_or_sail" required>
+                                    <option value=""></option>
+                                    <option value="power" <?php selected($spec('power_or_sail'), 'power'); ?>><?php esc_html_e('Power', 'openyacht'); ?></option>
+                                    <option value="sail" <?php selected($spec('power_or_sail'), 'sail'); ?>><?php esc_html_e('Sail', 'openyacht'); ?></option>
+                                </select>
+                            </div>
+                            <div class="col-span-5 max-[900px]:col-span-6">
+                                <label class="oy-label" for="oy_category"><?php esc_html_e('Category', 'openyacht'); ?></label>
+                                <?php $this->categoryCombobox($oldInput !== null ? (string) ($oldInput['spec']['category_slug'] ?? '') : (string) ($listing?->specifications['category']['slug'] ?? '')); ?>
+                            </div>
+                            <div class="col-span-4 max-[900px]:hidden"></div>
+
+                            <?php
+                            $numberFields = [
+                                ['beam_m', __('Beam (m)', 'openyacht'), '0.01'],
+                                ['draft_max_m', __('Max draft (m)', 'openyacht'), '0.01'],
+                                ['gross_tonnage', __('Gross tonnage', 'openyacht'), '0.1'],
+                                ['cruise_speed_kn', __('Cruise (kn)', 'openyacht'), '0.1'],
+                                ['max_speed_kn', __('Max (kn)', 'openyacht'), '0.1'],
+                                ['range_nmi', __('Range (nmi)', 'openyacht'), '1'],
+                                ['cabins', __('Cabins', 'openyacht'), '1'],
+                                ['sleeps', __('Sleeps', 'openyacht'), '1'],
+                                ['heads', __('Heads', 'openyacht'), '1'],
+                                ['guests_cruising', __('Guests cruising', 'openyacht'), '1'],
+                            ];
+        foreach ($numberFields as [$key, $label, $step]) :
+            ?>
+                                <div class="col-span-2 max-[900px]:col-span-4 flex flex-col justify-end">
+                                    <label class="oy-label" for="oy_spec_<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></label>
+                                    <input class="oy-input oy-num" name="oy[spec][<?php echo esc_attr($key); ?>]" id="oy_spec_<?php echo esc_attr($key); ?>" type="number" step="<?php echo esc_attr($step); ?>" min="0" value="<?php echo esc_attr($spec($key)); ?>">
+                                </div>
+                            <?php endforeach; ?>
+
+                            <div class="col-span-3 max-[900px]:col-span-6">
+                                <label class="oy-label" for="oy_spec_flag"><?php esc_html_e('Flag', 'openyacht'); ?></label>
+                                <input class="oy-input" name="oy[spec][flag]" id="oy_spec_flag" type="text" value="<?php echo esc_attr($spec('flag')); ?>">
+                            </div>
+                            <div class="col-span-3 max-[900px]:col-span-6">
+                                <label class="oy-label" for="oy_spec_registry_port"><?php esc_html_e('Registry port', 'openyacht'); ?></label>
+                                <input class="oy-input" name="oy[spec][registry_port]" id="oy_spec_registry_port" type="text" value="<?php echo esc_attr($spec('registry_port')); ?>">
+                            </div>
+                        </div>
+                    </section>
+                    <hr class="oy-rule">
+
+                    <section id="oy-description" class="scroll-mt-16 p-6">
+                        <h2 class="oy-section-h"><?php esc_html_e('Description', 'openyacht'); ?></h2>
+                        <div class="mt-5 grid grid-cols-12 gap-y-5">
+                            <div class="col-span-12">
+                                <label class="oy-label" for="oy_overview"><?php esc_html_e('Overview', 'openyacht'); ?></label>
+                                <?php
+            $overview = $oldInput !== null
+                ? (string) ($oldInput['overview'] ?? '')
+                : (string) ($listing?->descriptions[0]['content'] ?? '');
+        if (function_exists('wp_editor')) {
+            wp_editor($overview, 'oy_overview', [
+                'textarea_name' => 'oy[overview]',
+                'textarea_rows' => 12,
+                'media_buttons' => false,
+                'quicktags' => ['buttons' => 'strong,em,ul,ol,li,link'],
+                'tinymce' => [
+                    'toolbar1' => 'formatselect,bold,italic,bullist,numlist,link,unlink,removeformat,undo,redo',
+                    'toolbar2' => '',
+                    'block_formats' => 'Paragraph=p;Heading 3=h3;Heading 4=h4',
+                    'valid_elements' => 'p,br,ul,ol,li,strong/b,em/i,h3,h4,a[href|rel|target]',
+                ],
+            ]);
+        } else {
+            echo '<textarea class="oy-textarea" name="oy[overview]" id="oy_overview" rows="10">' . esc_textarea($overview) . '</textarea>';
+        }
+        ?>
+                                <p class="oy-help"><?php esc_html_e('The wire allows: p, br, ul, ol, li, strong, em, h3, h4, https links. Anything else is stripped on save — the Text tab shows the exact source.', 'openyacht'); ?></p>
+                            </div>
+                            <div class="col-span-12">
+                                <label class="oy-label" for="oy_features"><?php esc_html_e('Features', 'openyacht'); ?></label>
+                                <?php
+        $features = $oldInput !== null
+            ? (string) ($oldInput['features'] ?? '')
+            : implode("\n", array_column($listing->features ?? [], 'name'));
+        ?>
+                                <textarea class="oy-textarea" name="oy[features]" id="oy_features" rows="5" placeholder="<?php esc_attr_e('One feature per line', 'openyacht'); ?>"><?php echo esc_textarea($features); ?></textarea>
+                            </div>
+                        </div>
+                    </section>
+                    <hr class="oy-rule">
+
+                    <section id="oy-media" class="scroll-mt-16 p-6">
+                        <h2 class="oy-section-h"><?php esc_html_e('Media', 'openyacht'); ?></h2>
+                        <p class="oy-section-sub mt-1"><?php esc_html_e('The profile image is the hero every partner must use. A listing with imagery needs one; with none, leave it empty — never a placeholder.', 'openyacht'); ?></p>
+                        <div class="mt-5 grid grid-cols-12 gap-x-6 gap-y-6">
+                            <div class="col-span-4 max-[900px]:col-span-12">
+                                <span class="oy-label"><?php esc_html_e('Profile image', 'openyacht'); ?></span>
+                                <input type="hidden" name="oy[profile_id]" id="oy_profile_id" value="<?php echo esc_attr($profileId); ?>">
+                                <div id="oy_profile_preview" class="mb-2.5 flex flex-wrap gap-1.5"><span class="oy-media-empty w-full"><?php esc_html_e('No profile image', 'openyacht'); ?></span></div>
+                                <div class="flex gap-2">
+                                    <button type="button" class="oy-btn oy-btn-ghost" id="oy_profile_pick"><?php esc_html_e('Choose', 'openyacht'); ?></button>
+                                    <button type="button" class="oy-btn oy-btn-ghost" id="oy_profile_clear"><?php esc_html_e('Remove', 'openyacht'); ?></button>
+                                </div>
+                            </div>
+                            <div class="col-span-8 max-[900px]:col-span-12">
+                                <span class="oy-label"><?php esc_html_e('Gallery', 'openyacht'); ?></span>
+                                <input type="hidden" name="oy[gallery_ids]" id="oy_gallery_ids" value="<?php echo esc_attr($galleryCsv); ?>">
+                                <div id="oy_gallery_preview" class="mb-2.5 flex flex-wrap gap-1.5"><span class="oy-media-empty w-full"><?php esc_html_e('No gallery images', 'openyacht'); ?></span></div>
+                                <div class="flex gap-2">
+                                    <button type="button" class="oy-btn oy-btn-ghost" id="oy_gallery_pick"><?php esc_html_e('Choose images', 'openyacht'); ?></button>
+                                    <button type="button" class="oy-btn oy-btn-ghost" id="oy_gallery_clear"><?php esc_html_e('Clear', 'openyacht'); ?></button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                    <hr class="oy-rule">
+
+                    <section id="oy-sharing" class="scroll-mt-16 p-6">
+                        <h2 class="oy-section-h"><?php esc_html_e('Sharing', 'openyacht'); ?></h2>
+                        <p class="oy-section-sub mt-1"><?php esc_html_e('Unsharing sends affected partners a tombstone indistinguishable from a withdrawal; re-sharing surfaces the listing again on their next poll.', 'openyacht'); ?></p>
+                        <fieldset class="mt-5 flex flex-col gap-3">
+                            <legend class="screen-reader-text"><?php esc_html_e('Audience', 'openyacht'); ?></legend>
+                            <label class="oy-check"><input type="radio" name="oy[audience]" value="everyone" <?php checked($currentAudience, 'everyone'); ?>><span><?php esc_html_e('Everyone — all verified partners receive this listing', 'openyacht'); ?></span></label>
+                            <label class="oy-check"><input type="radio" name="oy[audience]" value="selected" <?php checked($currentAudience, 'selected'); ?>><span><?php esc_html_e('Selected partners only', 'openyacht'); ?></span></label>
+                            <div class="ml-6 flex flex-col gap-1.5 transition-opacity" data-oy-audience-partners>
+                                <?php foreach (Services::partners()->all() as $partner) : ?>
+                                    <label class="oy-check"><input type="checkbox" name="oy[audience_partners][]" value="<?php echo (int) $partner->id; ?>" <?php checked(in_array($partner->id, $selectedIds, true)); ?>><span><?php echo esc_html($partner->domain); ?></span></label>
+                                <?php endforeach; ?>
+                            </div>
+                            <label class="oy-check"><input type="radio" name="oy[audience]" value="none" <?php checked($currentAudience, 'none'); ?>><span><?php esc_html_e('No one — displayed locally, never shared', 'openyacht'); ?></span></label>
+                        </fieldset>
+                    </section>
+
+                    <div class="oy-savebar-mobile flex items-center justify-end gap-3 border-t border-(--color-line) p-4 rounded-b-lg min-[901px]:hidden">
+                        <button type="submit" class="oy-btn oy-btn-primary w-full">
+                            <?php echo esc_html($listing === null ? __('Create draft', 'openyacht') : __('Save changes', 'openyacht')); ?>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+        </div>
+        <?php
+    }
+
+    private function builderCombobox(string $currentSlug): void
+    {
+        $options = [['value' => '', 'label' => __('— Unlisted builder —', 'openyacht'), 'hint' => '']];
+
+        foreach ((new BuilderRegistry())->all() as $builder) {
+            $options[] = [
+                'value' => $builder['slug'],
+                'label' => $builder['name'],
+                'hint' => (string) ($builder['country'] ?? ''),
+            ];
+        }
+
+        $this->combobox('oy[builder_slug]', 'oy_builder', $currentSlug, $options, __('Search builders…', 'openyacht'), __('Builders', 'openyacht'));
+    }
+
+    private function categoryCombobox(string $currentSlug): void
+    {
+        $options = [['value' => '', 'label' => __('— No category —', 'openyacht'), 'hint' => '']];
+
+        foreach ((new CategoryVocabulary())->all() as $category) {
+            $options[] = ['value' => $category['slug'], 'label' => $category['name'], 'hint' => ''];
+        }
+
+        $this->combobox('oy[spec][category_slug]', 'oy_category', $currentSlug, $options, __('Search categories…', 'openyacht'), __('Categories', 'openyacht'));
+    }
+
+    /**
+     * @param list<array{value: string, label: string, hint: string}> $options
+     */
+    private function combobox(string $name, string $id, string $current, array $options, string $placeholder, string $listLabel): void
+    {
+        ?>
+        <div class="oy-combobox" data-oy-combobox>
+            <input type="hidden" name="<?php echo esc_attr($name); ?>" value="<?php echo esc_attr($current); ?>">
+            <input type="text" class="oy-input" id="<?php echo esc_attr($id); ?>" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="<?php echo esc_attr($id); ?>_list" autocomplete="off" placeholder="<?php echo esc_attr($placeholder); ?>" data-oy-combobox-input>
+            <ul class="oy-combobox-list" id="<?php echo esc_attr($id); ?>_list" role="listbox" aria-label="<?php echo esc_attr($listLabel); ?>" data-empty-text="<?php esc_attr_e('No matches', 'openyacht'); ?>" hidden></ul>
+            <script type="application/json" data-oy-combobox-options><?php echo wp_json_encode($options, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG); ?></script>
+        </div>
+        <?php
+    }
+
+    private function gatedChip(string $label): void
+    {
+        ?>
+        <span class="oy-chip oy-chip-gated" title="<?php esc_attr_e('Shared only with partners granted this field group; withheld values are nulled server-side.', 'openyacht'); ?>">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="5.5" cy="10.5" r="2.75"/><path d="M7.6 8.4 13 3m-2.5 2.5 2 2"/></svg>
+            <?php echo esc_html($label); ?>
+        </span>
+        <?php
+    }
+
+    /**
+     * @param array<string, mixed>|null $oldInput
+     * @return array{0: string, 1: string}
+     */
+    private function mediaState(?Listing $listing, ?array $oldInput): array
+    {
         $media = $listing !== null ? Services::listingMedia()->forListing($listing->id) : [];
         $profile = null;
         $galleryIds = [];
@@ -62,265 +494,10 @@ final class ListingForm
             }
         }
 
-        $profileId = $oldInput !== null ? (string) ($oldInput['profile_id'] ?? '') : (string) ($profile->attachmentId ?? '');
-        $galleryCsv = $oldInput !== null ? (string) ($oldInput['gallery_ids'] ?? '') : implode(',', $galleryIds);
-
-        ?>
-        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
-            <input type="hidden" name="action" value="openyacht_listing_save">
-            <?php if ($listing !== null) : ?>
-                <input type="hidden" name="id" value="<?php echo (int) $listing->id; ?>">
-            <?php endif; ?>
-            <?php wp_nonce_field('openyacht_listing_save'); ?>
-
-            <h2><?php esc_html_e('Listing', 'openyacht'); ?></h2>
-            <table class="form-table" role="presentation">
-                <tr>
-                    <th scope="row"><label for="oy_name"><?php esc_html_e('Name', 'openyacht'); ?> <span class="description">(<?php esc_html_e('required', 'openyacht'); ?>)</span></label></th>
-                    <td><input name="oy[name]" id="oy_name" type="text" class="regular-text" value="<?php echo esc_attr($v('name', $listing?->name)); ?>" required></td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="oy_summary"><?php esc_html_e('Summary', 'openyacht'); ?></label></th>
-                    <td><textarea name="oy[summary]" id="oy_summary" class="large-text" rows="3"><?php echo esc_textarea($v('summary', $listing?->summary)); ?></textarea>
-                    <p class="description"><?php esc_html_e('Plain-text one-paragraph summary.', 'openyacht'); ?></p></td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="oy_condition"><?php esc_html_e('Condition', 'openyacht'); ?></label></th>
-                    <td><select name="oy[condition]" id="oy_condition">
-                        <?php foreach (['' => '—', 'new' => __('New', 'openyacht'), 'used' => __('Used', 'openyacht')] as $value => $label) : ?>
-                            <option value="<?php echo esc_attr((string) $value); ?>" <?php selected($v('condition', $listing?->condition), (string) $value); ?>><?php echo esc_html($label); ?></option>
-                        <?php endforeach; ?>
-                    </select></td>
-                </tr>
-            </table>
-
-            <h2><?php esc_html_e('Vessel', 'openyacht'); ?></h2>
-            <table class="form-table" role="presentation">
-                <tr>
-                    <th scope="row"><label for="oy_builder_slug"><?php esc_html_e('Builder', 'openyacht'); ?></label></th>
-                    <td>
-                        <select name="oy[builder_slug]" id="oy_builder_slug">
-                            <option value=""><?php esc_html_e('— unlisted builder —', 'openyacht'); ?></option>
-                            <?php foreach ((new BuilderRegistry())->all() as $builder) : ?>
-                                <option value="<?php echo esc_attr($builder['slug']); ?>" <?php selected($v('builder_slug', $listing?->builderSlug), $builder['slug']); ?>><?php echo esc_html($builder['name']); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <input name="oy[builder_name]" type="text" class="regular-text" placeholder="<?php esc_attr_e('Unlisted builder name', 'openyacht'); ?>" value="<?php echo esc_attr($v('builder_name', $listing?->builderName)); ?>">
-                        <p class="description"><?php esc_html_e('Pick from the vendored registry; only use the free-text name for a builder the registry does not list.', 'openyacht'); ?></p>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="oy_model_name"><?php esc_html_e('Model', 'openyacht'); ?></label></th>
-                    <td><input name="oy[model_name]" id="oy_model_name" type="text" class="regular-text" value="<?php echo esc_attr($v('model_name', $listing?->modelName)); ?>"></td>
-                </tr>
-                <tr>
-                    <th scope="row"><?php esc_html_e('Years', 'openyacht'); ?></th>
-                    <td>
-                        <label><?php esc_html_e('Built', 'openyacht'); ?> <input name="oy[year_built]" type="number" min="1800" max="2100" class="small-text" value="<?php echo esc_attr($v('year_built', $listing?->yearBuilt)); ?>"></label>
-                        <label><?php esc_html_e('Refit', 'openyacht'); ?> <input name="oy[refit_year]" type="number" min="1800" max="2100" class="small-text" value="<?php echo esc_attr($v('refit_year', $listing?->refitYear)); ?>"></label>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="oy_loa_m"><?php esc_html_e('LOA (m)', 'openyacht'); ?></label></th>
-                    <td><input name="oy[loa_m]" id="oy_loa_m" type="number" step="0.01" min="0" class="small-text" value="<?php echo esc_attr($v('loa_m', $listing?->loaM)); ?>">
-                    <p class="description"><?php esc_html_e('Metric only — the wire carries no imperial units.', 'openyacht'); ?></p></td>
-                </tr>
-                <tr>
-                    <th scope="row"><?php esc_html_e('Identifiers', 'openyacht'); ?></th>
-                    <td>
-                        <label>HIN <input name="oy[hin]" type="text" value="<?php echo esc_attr($v('hin', $listing?->hin)); ?>"></label>
-                        <label>IMO <input name="oy[imo]" type="text" class="small-text" value="<?php echo esc_attr($v('imo', $listing?->imo)); ?>"></label>
-                        <label>MMSI <input name="oy[mmsi]" type="text" class="small-text" value="<?php echo esc_attr($v('mmsi', $listing?->mmsi)); ?>"></label>
-                        <p class="description"><?php esc_html_e('Shared only with partners granted the vessel_identifiers field group.', 'openyacht'); ?></p>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="oy_previous_names"><?php esc_html_e('Previous names', 'openyacht'); ?></label></th>
-                    <td><input name="oy[previous_names]" id="oy_previous_names" type="text" class="regular-text" value="<?php echo esc_attr($v('previous_names', $listing !== null ? implode(', ', $listing->previousNames) : null)); ?>">
-                    <p class="description"><?php esc_html_e('Comma-separated.', 'openyacht'); ?></p></td>
-                </tr>
-            </table>
-
-            <h2><?php esc_html_e('Price', 'openyacht'); ?></h2>
-            <table class="form-table" role="presentation">
-                <tr>
-                    <th scope="row"><label for="oy_price_amount"><?php esc_html_e('Asking price', 'openyacht'); ?></label></th>
-                    <td>
-                        <select name="oy[price_currency]">
-                            <option value=""></option>
-                            <?php foreach (self::CURRENCIES as $currency) : ?>
-                                <option value="<?php echo esc_attr($currency); ?>" <?php selected($v('price_currency', $listing?->priceCurrency), $currency); ?>><?php echo esc_html($currency); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <input name="oy[price_amount]" id="oy_price_amount" type="text" inputmode="numeric" pattern="[0-9]*" class="regular-text" value="<?php echo esc_attr($v('price_amount', $listing?->priceAmount)); ?>">
-                        <p class="description"><?php esc_html_e('Whole number, no separators. Changes append to the public price history.', 'openyacht'); ?></p>
-                        <label><input name="oy[price_on_application]" type="checkbox" value="1" <?php checked($checked('price_on_application', $listing->priceOnApplication ?? false)); ?>> <?php esc_html_e('Price on application (amount never leaves this site)', 'openyacht'); ?></label><br>
-                        <label><input name="oy[starting_price]" type="checkbox" value="1" <?php checked($checked('starting_price', $listing->startingPrice ?? false)); ?>> <?php esc_html_e('Starting price (new builds)', 'openyacht'); ?></label>
-                    </td>
-                </tr>
-            </table>
-
-            <h2><?php esc_html_e('Location', 'openyacht'); ?></h2>
-            <table class="form-table" role="presentation">
-                <tr>
-                    <th scope="row"><label for="oy_location_display"><?php esc_html_e('Display location', 'openyacht'); ?></label></th>
-                    <td><input name="oy[location_display]" id="oy_location_display" type="text" class="regular-text" value="<?php echo esc_attr($v('location_display', $listing?->locationDisplay)); ?>">
-                    <p class="description"><?php esc_html_e('What every partner sees, e.g. "French Riviera".', 'openyacht'); ?></p></td>
-                </tr>
-                <tr>
-                    <th scope="row"><?php esc_html_e('Details', 'openyacht'); ?></th>
-                    <td>
-                        <label><?php esc_html_e('City', 'openyacht'); ?> <input name="oy[location_city]" type="text" value="<?php echo esc_attr($v('location_city', $listing?->locationCity)); ?>"></label>
-                        <label><?php esc_html_e('State', 'openyacht'); ?> <input name="oy[location_state]" type="text" value="<?php echo esc_attr($v('location_state', $listing?->locationState)); ?>"></label>
-                        <label><?php esc_html_e('Country', 'openyacht'); ?> <input name="oy[location_country]" type="text" maxlength="2" class="small-text" placeholder="FR" value="<?php echo esc_attr($v('location_country', $listing?->locationCountry)); ?>"></label>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><?php esc_html_e('Exact location', 'openyacht'); ?></th>
-                    <td>
-                        <label><?php esc_html_e('Marina', 'openyacht'); ?> <input name="oy[location_marina]" type="text" class="regular-text" value="<?php echo esc_attr($v('location_marina', $listing?->locationMarina)); ?>"></label>
-                        <label><?php esc_html_e('Lat', 'openyacht'); ?> <input name="oy[location_lat]" type="number" step="any" class="small-text" value="<?php echo esc_attr($v('location_lat', $listing?->locationLat)); ?>"></label>
-                        <label><?php esc_html_e('Lon', 'openyacht'); ?> <input name="oy[location_lon]" type="number" step="any" class="small-text" value="<?php echo esc_attr($v('location_lon', $listing?->locationLon)); ?>"></label>
-                        <p class="description"><?php esc_html_e('Shared only with partners granted the location_exact field group.', 'openyacht'); ?></p>
-                    </td>
-                </tr>
-            </table>
-
-            <h2><?php esc_html_e('Specifications', 'openyacht'); ?></h2>
-            <table class="form-table" role="presentation">
-                <tr>
-                    <th scope="row"><label for="oy_power_or_sail"><?php esc_html_e('Power or sail', 'openyacht'); ?> <span class="description">(<?php esc_html_e('required', 'openyacht'); ?>)</span></label></th>
-                    <td>
-                        <select name="oy[spec][power_or_sail]" id="oy_power_or_sail" required>
-                            <option value=""></option>
-                            <option value="power" <?php selected($spec('power_or_sail'), 'power'); ?>><?php esc_html_e('Power', 'openyacht'); ?></option>
-                            <option value="sail" <?php selected($spec('power_or_sail'), 'sail'); ?>><?php esc_html_e('Sail', 'openyacht'); ?></option>
-                        </select>
-                        <select name="oy[spec][category_slug]">
-                            <option value=""><?php esc_html_e('— no category —', 'openyacht'); ?></option>
-                            <?php $categorySlug = $oldInput !== null ? (string) ($oldInput['spec']['category_slug'] ?? '') : (string) ($listing?->specifications['category']['slug'] ?? ''); ?>
-                            <?php foreach ((new CategoryVocabulary())->all() as $category) : ?>
-                                <option value="<?php echo esc_attr($category['slug']); ?>" <?php selected($categorySlug, $category['slug']); ?>><?php echo esc_html($category['name']); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><?php esc_html_e('Dimensions', 'openyacht'); ?></th>
-                    <td>
-                        <label><?php esc_html_e('Beam (m)', 'openyacht'); ?> <input name="oy[spec][beam_m]" type="number" step="0.01" class="small-text" value="<?php echo esc_attr($spec('beam_m')); ?>"></label>
-                        <label><?php esc_html_e('Max draft (m)', 'openyacht'); ?> <input name="oy[spec][draft_max_m]" type="number" step="0.01" class="small-text" value="<?php echo esc_attr($spec('draft_max_m')); ?>"></label>
-                        <label><?php esc_html_e('Gross tonnage', 'openyacht'); ?> <input name="oy[spec][gross_tonnage]" type="number" step="0.1" class="small-text" value="<?php echo esc_attr($spec('gross_tonnage')); ?>"></label>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><?php esc_html_e('Performance', 'openyacht'); ?></th>
-                    <td>
-                        <label><?php esc_html_e('Cruise (kn)', 'openyacht'); ?> <input name="oy[spec][cruise_speed_kn]" type="number" step="0.1" class="small-text" value="<?php echo esc_attr($spec('cruise_speed_kn')); ?>"></label>
-                        <label><?php esc_html_e('Max (kn)', 'openyacht'); ?> <input name="oy[spec][max_speed_kn]" type="number" step="0.1" class="small-text" value="<?php echo esc_attr($spec('max_speed_kn')); ?>"></label>
-                        <label><?php esc_html_e('Range (nmi)', 'openyacht'); ?> <input name="oy[spec][range_nmi]" type="number" step="1" class="small-text" value="<?php echo esc_attr($spec('range_nmi')); ?>"></label>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><?php esc_html_e('Accommodation', 'openyacht'); ?></th>
-                    <td>
-                        <label><?php esc_html_e('Cabins', 'openyacht'); ?> <input name="oy[spec][cabins]" type="number" class="small-text" value="<?php echo esc_attr($spec('cabins')); ?>"></label>
-                        <label><?php esc_html_e('Sleeps', 'openyacht'); ?> <input name="oy[spec][sleeps]" type="number" class="small-text" value="<?php echo esc_attr($spec('sleeps')); ?>"></label>
-                        <label><?php esc_html_e('Heads', 'openyacht'); ?> <input name="oy[spec][heads]" type="number" class="small-text" value="<?php echo esc_attr($spec('heads')); ?>"></label>
-                        <label><?php esc_html_e('Guests cruising', 'openyacht'); ?> <input name="oy[spec][guests_cruising]" type="number" class="small-text" value="<?php echo esc_attr($spec('guests_cruising')); ?>"></label>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><?php esc_html_e('Registry', 'openyacht'); ?></th>
-                    <td>
-                        <label><?php esc_html_e('Flag', 'openyacht'); ?> <input name="oy[spec][flag]" type="text" value="<?php echo esc_attr($spec('flag')); ?>"></label>
-                        <label><?php esc_html_e('Registry port', 'openyacht'); ?> <input name="oy[spec][registry_port]" type="text" value="<?php echo esc_attr($spec('registry_port')); ?>"></label>
-                    </td>
-                </tr>
-            </table>
-
-            <h2><?php esc_html_e('Description', 'openyacht'); ?></h2>
-            <table class="form-table" role="presentation">
-                <tr>
-                    <th scope="row"><label for="oy_overview"><?php esc_html_e('Overview', 'openyacht'); ?></label></th>
-                    <td>
-                        <?php
-                        $overview = $oldInput !== null
-                            ? (string) ($oldInput['overview'] ?? '')
-                            : (string) ($listing?->descriptions[0]['content'] ?? '');
-        ?>
-                        <textarea name="oy[overview]" id="oy_overview" class="large-text" rows="10"><?php echo esc_textarea($overview); ?></textarea>
-                        <p class="description"><?php esc_html_e('Restricted HTML: p, br, ul, ol, li, strong, em, h3, h4, https links. Everything else is stripped on save.', 'openyacht'); ?></p>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><label for="oy_features"><?php esc_html_e('Features', 'openyacht'); ?></label></th>
-                    <td>
-                        <?php
-        $features = $oldInput !== null
-            ? (string) ($oldInput['features'] ?? '')
-            : implode("\n", array_column($listing->features ?? [], 'name'));
-        ?>
-                        <textarea name="oy[features]" id="oy_features" class="large-text" rows="5"><?php echo esc_textarea($features); ?></textarea>
-                        <p class="description"><?php esc_html_e('One feature per line.', 'openyacht'); ?></p>
-                    </td>
-                </tr>
-            </table>
-
-            <h2><?php esc_html_e('Sharing', 'openyacht'); ?></h2>
-            <table class="form-table" role="presentation">
-                <tr>
-                    <th scope="row"><?php esc_html_e('Audience', 'openyacht'); ?></th>
-                    <td>
-                        <?php
-                        $currentAudience = $oldInput !== null
-                            ? (string) ($oldInput['audience'] ?? 'everyone')
-                            : ($listing?->audience->value ?? 'everyone');
-        $selectedIds = $oldInput !== null
-            ? array_map('intval', (array) ($oldInput['audience_partners'] ?? []))
-            : ($listing !== null ? Services::audience()->partnersForListing($listing->id) : []);
-        ?>
-                        <fieldset>
-                            <label><input type="radio" name="oy[audience]" value="everyone" <?php checked($currentAudience, 'everyone'); ?>> <?php esc_html_e('Everyone — all verified partners receive this listing', 'openyacht'); ?></label><br>
-                            <label><input type="radio" name="oy[audience]" value="selected" <?php checked($currentAudience, 'selected'); ?>> <?php esc_html_e('Selected partners only:', 'openyacht'); ?></label>
-                            <div style="margin:4px 0 4px 24px;">
-                                <?php foreach (Services::partners()->all() as $partner) : ?>
-                                    <label style="display:block;"><input type="checkbox" name="oy[audience_partners][]" value="<?php echo (int) $partner->id; ?>" <?php checked(in_array($partner->id, $selectedIds, true)); ?>> <?php echo esc_html($partner->domain); ?></label>
-                                <?php endforeach; ?>
-                            </div>
-                            <label><input type="radio" name="oy[audience]" value="none" <?php checked($currentAudience, 'none'); ?>> <?php esc_html_e('No one — displayed locally, never shared', 'openyacht'); ?></label>
-                        </fieldset>
-                        <p class="description"><?php esc_html_e('Unsharing sends affected partners a tombstone indistinguishable from a withdrawal; re-sharing surfaces the listing again on their next poll.', 'openyacht'); ?></p>
-                    </td>
-                </tr>
-            </table>
-
-            <h2><?php esc_html_e('Media', 'openyacht'); ?></h2>
-            <table class="form-table" role="presentation">
-                <tr>
-                    <th scope="row"><?php esc_html_e('Profile image', 'openyacht'); ?></th>
-                    <td>
-                        <input type="hidden" name="oy[profile_id]" id="oy_profile_id" value="<?php echo esc_attr($profileId); ?>">
-                        <div id="oy_profile_preview" style="margin-bottom:8px;"></div>
-                        <button type="button" class="button" id="oy_profile_pick"><?php esc_html_e('Choose profile image', 'openyacht'); ?></button>
-                        <button type="button" class="button" id="oy_profile_clear"><?php esc_html_e('Remove', 'openyacht'); ?></button>
-                        <p class="description"><?php esc_html_e('The explicit hero image partners must use. A listing with imagery must have one; with no imagery, leave it empty — never a placeholder.', 'openyacht'); ?></p>
-                    </td>
-                </tr>
-                <tr>
-                    <th scope="row"><?php esc_html_e('Gallery', 'openyacht'); ?></th>
-                    <td>
-                        <input type="hidden" name="oy[gallery_ids]" id="oy_gallery_ids" value="<?php echo esc_attr($galleryCsv); ?>">
-                        <div id="oy_gallery_preview" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
-                        <button type="button" class="button" id="oy_gallery_pick"><?php esc_html_e('Choose gallery images', 'openyacht'); ?></button>
-                        <button type="button" class="button" id="oy_gallery_clear"><?php esc_html_e('Clear', 'openyacht'); ?></button>
-                    </td>
-                </tr>
-            </table>
-
-            <?php submit_button($listing === null ? __('Create listing (as draft)', 'openyacht') : __('Save changes', 'openyacht')); ?>
-        </form>
-        <?php
+        return [
+            $oldInput !== null ? (string) ($oldInput['profile_id'] ?? '') : (string) ($profile->attachmentId ?? ''),
+            $oldInput !== null ? (string) ($oldInput['gallery_ids'] ?? '') : implode(',', $galleryIds),
+        ];
     }
 
     /**

@@ -19,6 +19,13 @@ interface VisibilityEventRepository
 
     public const VISIBLE = 'visible';
 
+    /**
+     * The partner's served view changed (field-group grants) without a
+     * visibility change: lifts the listing's effective timestamp for that
+     * partner so the next poll resends the re-gated payload (API-4).
+     */
+    public const REFRESHED = 'refreshed';
+
     public function append(int $listingId, int $partnerId, string $event, ?string $occurredAtStored = null): void;
 
     /**
