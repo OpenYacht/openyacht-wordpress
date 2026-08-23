@@ -28,6 +28,29 @@ final class ListingCopy
         public readonly string $receivedAt,
         public readonly bool $signatureVerified,
         public readonly ?string $tombstonedAt,
+        public readonly ?string $selectedAt = null,
     ) {
+    }
+
+    /**
+     * Selected for import: media is cached and the display layer projects
+     * it. Unselected copies stay lightweight — JSON plus the authority's
+     * own thumbnail for previews.
+     */
+    public function isSelected(): bool
+    {
+        return $this->selectedAt !== null;
+    }
+
+    /**
+     * The authority-hosted preview thumbnail (LS-8 mandates it whenever
+     * the listing has imagery) — the wire carries it exactly so pickers
+     * need no local image pipeline.
+     */
+    public function thumbnailUrl(): ?string
+    {
+        $url = $this->payload['media']['profile']['thumbnail_url'] ?? null;
+
+        return is_string($url) && str_starts_with(strtolower($url), 'https://') ? $url : null;
     }
 }

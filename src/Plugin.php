@@ -41,9 +41,11 @@ final class Plugin
 
         // Media fetching is queued in small single events so a sync pass is
         // never blocked on image downloads; a tombstone purges immediately
-        // (cached media inherits the usage terms, ID-10).
+        // (cached media inherits the usage terms, ID-10). Only copies the
+        // media policy covers are cached — everything else previews via
+        // the authority's own thumbnails.
         $queueMedia = static function (Federation\ListingCopy $copy): void {
-            if (! wp_next_scheduled('openyacht_fetch_copy_media', [$copy->id])) {
+            if (Media\MediaPolicy::shouldCache($copy) && ! wp_next_scheduled('openyacht_fetch_copy_media', [$copy->id])) {
                 wp_schedule_single_event(time() + 10, 'openyacht_fetch_copy_media', [$copy->id]);
             }
         };
@@ -55,7 +57,7 @@ final class Plugin
         add_action('openyacht_fetch_copy_media', static function (int $copyId): void {
             $copy = Services::copies()->find($copyId);
 
-            if ($copy !== null && $copy->tombstonedAt === null) {
+            if ($copy !== null && $copy->tombstonedAt === null && Media\MediaPolicy::shouldCache($copy)) {
                 Services::mediaService()->sync($copy);
             }
         });
@@ -76,6 +78,7 @@ final class Plugin
             (new Settings())->register();
             (new Admin\PartnersPage())->register();
             (new Admin\ListingsPage())->register();
+            (new Admin\SyncedListingsPage())->register();
             add_action('admin_notices', [$this, 'syncWatchdogNotice']);
         }
     }

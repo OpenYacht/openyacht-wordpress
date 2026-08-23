@@ -13,7 +13,7 @@ namespace OpenYacht;
  */
 final class Schema
 {
-    public const VERSION = 3;
+    public const VERSION = 4;
 
     public const OPTION = 'openyacht_schema_version';
 
@@ -208,6 +208,7 @@ final class Schema
   listing_updated_at datetime NULL,
   received_at datetime NOT NULL,
   signature_verified tinyint(1) NOT NULL DEFAULT 0,
+  selected_at datetime NULL,
   tombstoned_at datetime NULL,
   created_at datetime NOT NULL,
   updated_at datetime NOT NULL,

@@ -25,10 +25,16 @@ final class Settings
     }
 
     /**
-     * @return array<string, array{label: string, type: 'text'|'checkbox', section: string, default: string|bool, description?: string}>
+     * @return array<string, array{label: string, type: 'text'|'checkbox'|'select', section: string, default: string|bool, description?: string, options?: array<string, string>}>
      */
     public function fields(): array
     {
+        $driverOptions = [];
+
+        foreach (\OpenYacht\Media\StorageFactory::drivers() as $name => $driver) {
+            $driverOptions[$name] = (string) $driver['label'];
+        }
+
         return [
             'node_name' => [
                 'label' => __('Node name', 'openyacht'),
@@ -36,6 +42,25 @@ final class Settings
                 'section' => 'identity',
                 'default' => (string) get_bloginfo('name'),
                 'description' => __('Published in this node\'s /.well-known/openyacht discovery document.', 'openyacht'),
+            ],
+            'media_policy' => [
+                'label' => __('Cache partner media for', 'openyacht'),
+                'type' => 'select',
+                'section' => 'media',
+                'default' => 'selected',
+                'options' => [
+                    'selected' => __('Listings selected for import only (recommended)', 'openyacht'),
+                    'all' => __('Every synced listing (can use a lot of disk)', 'openyacht'),
+                ],
+                'description' => __('Listing data always syncs in full; this controls image caching. Unselected listings preview via the partner\'s own thumbnails.', 'openyacht'),
+            ],
+            'storage_driver' => [
+                'label' => __('Media storage', 'openyacht'),
+                'type' => 'select',
+                'section' => 'media',
+                'default' => 'local',
+                'options' => $driverOptions,
+                'description' => __('Where cached partner media is stored. Additional drivers (S3, R2) register here when their plugin is active.', 'openyacht'),
             ],
             'delete_data_on_uninstall' => [
                 'label' => __('Delete all data on uninstall', 'openyacht'),
@@ -54,6 +79,7 @@ final class Settings
     {
         return [
             'identity' => __('Node identity', 'openyacht'),
+            'media' => __('Partner media', 'openyacht'),
             'uninstall' => __('Uninstall', 'openyacht'),
         ];
     }
@@ -130,6 +156,9 @@ final class Settings
         foreach ($this->fields() as $key => $field) {
             $clean[$key] = match ($field['type']) {
                 'checkbox' => ! empty($input[$key]),
+                'select' => isset($input[$key]) && isset($field['options'][(string) $input[$key]])
+                    ? (string) $input[$key]
+                    : (string) $field['default'],
                 'text' => isset($input[$key]) && is_scalar($input[$key])
                     ? sanitize_text_field((string) $input[$key])
                     : (string) $field['default'],
@@ -149,6 +178,20 @@ final class Settings
         $value = $this->all()[$key];
 
         switch ($field['type']) {
+            case 'select':
+                printf('<select id="%s" name="%s">', esc_attr($id), esc_attr($name));
+
+                foreach ($field['options'] ?? [] as $optionValue => $optionLabel) {
+                    printf(
+                        '<option value="%s" %s>%s</option>',
+                        esc_attr((string) $optionValue),
+                        selected((string) $value, (string) $optionValue, false),
+                        esc_html((string) $optionLabel),
+                    );
+                }
+
+                echo '</select>';
+                break;
             case 'checkbox':
                 printf(
                     '<input type="checkbox" id="%s" name="%s" value="1" %s>',

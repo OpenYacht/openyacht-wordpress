@@ -35,4 +35,13 @@ interface CopyRepository
     public function tombstone(int $partnerId, string $canonicalUri, string $status, ?string $listingUpdatedAt): ?ListingCopy;
 
     public function countForPartner(int $partnerId): int;
+
+    public function setSelected(int $copyId, bool $selected): void;
+
+    /**
+     * Live copies selected for import.
+     *
+     * @return list<ListingCopy>
+     */
+    public function selected(): array;
 }

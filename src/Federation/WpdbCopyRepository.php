@@ -115,6 +115,24 @@ final class WpdbCopyRepository implements CopyRepository
         return $this->findForPartner($partnerId, $canonicalUri);
     }
 
+    public function setSelected(int $copyId, bool $selected): void
+    {
+        $this->wpdb->update($this->table(), [
+            'selected_at' => $selected ? gmdate('Y-m-d H:i:s') : null,
+            'updated_at' => gmdate('Y-m-d H:i:s'),
+        ], ['id' => $copyId]);
+    }
+
+    public function selected(): array
+    {
+        $rows = $this->wpdb->get_results(
+            "SELECT * FROM {$this->table()} WHERE selected_at IS NOT NULL AND tombstoned_at IS NULL ORDER BY listing_updated_at DESC",
+            'ARRAY_A',
+        );
+
+        return array_map($this->hydrate(...), is_array($rows) ? $rows : []);
+    }
+
     public function countForPartner(int $partnerId): int
     {
         return (int) $this->wpdb->get_var($this->wpdb->prepare(
@@ -157,6 +175,7 @@ final class WpdbCopyRepository implements CopyRepository
             receivedAt: (string) ($row['received_at'] ?? ''),
             signatureVerified: (bool) ($row['signature_verified'] ?? false),
             tombstonedAt: $row['tombstoned_at'] ?? null,
+            selectedAt: isset($row['selected_at']) && $row['selected_at'] !== '' ? (string) $row['selected_at'] : null,
         );
     }
 

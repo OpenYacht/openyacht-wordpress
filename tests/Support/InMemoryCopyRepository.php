@@ -97,6 +97,7 @@ final class InMemoryCopyRepository implements CopyRepository
             receivedAt: $existing->receivedAt,
             signatureVerified: $existing->signatureVerified,
             tombstonedAt: gmdate('Y-m-d H:i:s'),
+            selectedAt: $existing->selectedAt,
         );
 
         $this->copies[$existing->id] = $copy;
@@ -109,6 +110,39 @@ final class InMemoryCopyRepository implements CopyRepository
         return count(array_filter(
             $this->copies,
             static fn (ListingCopy $copy): bool => $copy->partnerId === $partnerId,
+        ));
+    }
+
+    public function setSelected(int $copyId, bool $selected): void
+    {
+        $existing = $this->copies[$copyId] ?? null;
+
+        if ($existing === null) {
+            return;
+        }
+
+        $this->copies[$copyId] = new ListingCopy(
+            id: $existing->id,
+            partnerId: $existing->partnerId,
+            canonicalUri: $existing->canonicalUri,
+            authorityDomain: $existing->authorityDomain,
+            type: $existing->type,
+            status: $existing->status,
+            name: $existing->name,
+            payload: $existing->payload,
+            listingUpdatedAt: $existing->listingUpdatedAt,
+            receivedAt: $existing->receivedAt,
+            signatureVerified: $existing->signatureVerified,
+            tombstonedAt: $existing->tombstonedAt,
+            selectedAt: $selected ? gmdate('Y-m-d H:i:s') : null,
+        );
+    }
+
+    public function selected(): array
+    {
+        return array_values(array_filter(
+            $this->copies,
+            static fn (ListingCopy $copy): bool => $copy->isSelected() && $copy->tombstonedAt === null,
         ));
     }
 }
