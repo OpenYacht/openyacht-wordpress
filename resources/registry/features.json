@@ -1,0 +1,223 @@
+{
+	"registry": "openyacht-features",
+	"version": "2026.08.0",
+	"canonical_url": "https://openyacht.org/registry/features.json",
+	"notes": "DRAFT (proposed 2026-08-23; not yet adopted). Well-known feature slugs for the OpenYacht protocol — the non-normative list listing-schema.md §Features says is maintained alongside the other vocabulary curation material. Seeded from the Worth Avenue intranet's production reference data (amenities + water toys) plus the spec's own named examples. name is free text on the wire; a slug is sent only when the feature matches an entry here. category is the entry's grouping label, not an enum.",
+	"features": [
+		{
+			"slug": "air-conditioning",
+			"name": "Air Conditioning",
+			"category": "comfort-luxury"
+		},
+		{
+			"slug": "deck-jacuzzi",
+			"name": "Deck Jacuzzi",
+			"category": "comfort-luxury"
+		},
+		{
+			"slug": "wifi",
+			"name": "WiFi",
+			"category": "comfort-luxury"
+		},
+		{
+			"slug": "elevator",
+			"name": "Elevator",
+			"category": "comfort-luxury"
+		},
+		{
+			"slug": "tower",
+			"name": "Tower",
+			"category": "comfort-luxury"
+		},
+		{
+			"slug": "full-beam-master",
+			"name": "Full Beam Master",
+			"category": "comfort-luxury"
+		},
+		{
+			"slug": "on-deck-master",
+			"name": "On Deck Master",
+			"category": "comfort-luxury"
+		},
+		{
+			"slug": "gym-equipment",
+			"name": "Gym Equipment",
+			"category": "fitness-wellness"
+		},
+		{
+			"slug": "spa-sauna",
+			"name": "Spa / Sauna",
+			"category": "fitness-wellness"
+		},
+		{
+			"slug": "stabilisers-anchor",
+			"name": "Stabilisers at Anchor",
+			"category": "stability-safety"
+		},
+		{
+			"slug": "stabilisers-underway",
+			"name": "Stabilisers Underway",
+			"category": "stability-safety"
+		},
+		{
+			"slug": "helipad",
+			"name": "Helipad",
+			"category": "stability-safety"
+		},
+		{
+			"slug": "wheelchair-accessible",
+			"name": "Wheelchair Accessible",
+			"category": "stability-safety"
+		},
+		{
+			"slug": "bow-thrusters",
+			"name": "Bow Thrusters",
+			"category": "stability-safety"
+		},
+		{
+			"slug": "stern-thrusters",
+			"name": "Stern Thrusters",
+			"category": "stability-safety"
+		},
+		{
+			"slug": "seabob",
+			"name": "Seabob",
+			"category": "water-sports"
+		},
+		{
+			"slug": "jet-ski",
+			"name": "Jet Ski",
+			"category": "water-sports"
+		},
+		{
+			"slug": "water-skis",
+			"name": "Water Skis",
+			"category": "water-sports"
+		},
+		{
+			"slug": "wakeboard",
+			"name": "Wakeboard",
+			"category": "water-sports"
+		},
+		{
+			"slug": "kneeboard",
+			"name": "Kneeboard",
+			"category": "water-sports"
+		},
+		{
+			"slug": "e-foil",
+			"name": "E-Foil",
+			"category": "water-sports"
+		},
+		{
+			"slug": "surfboard",
+			"name": "Surfboard",
+			"category": "water-sports"
+		},
+		{
+			"slug": "paddle-board",
+			"name": "Paddle Board",
+			"category": "paddle-rowing"
+		},
+		{
+			"slug": "kayak",
+			"name": "Kayak",
+			"category": "paddle-rowing"
+		},
+		{
+			"slug": "canoe",
+			"name": "Canoe",
+			"category": "paddle-rowing"
+		},
+		{
+			"slug": "snorkeling",
+			"name": "Snorkeling Equipment",
+			"category": "diving-snorkeling"
+		},
+		{
+			"slug": "scuba-diving",
+			"name": "Scuba Diving",
+			"category": "diving-snorkeling"
+		},
+		{
+			"slug": "sea-scooter",
+			"name": "Sea Scooter",
+			"category": "diving-snorkeling"
+		},
+		{
+			"slug": "hookah-dive-system",
+			"name": "Hookah Dive System",
+			"category": "diving-snorkeling"
+		},
+		{
+			"slug": "nitrox",
+			"name": "Nitrox",
+			"category": "diving-snorkeling"
+		},
+		{
+			"slug": "submersible",
+			"name": "Submersible",
+			"category": "diving-snorkeling"
+		},
+		{
+			"slug": "towable-tubes",
+			"name": "Towable Tubes",
+			"category": "inflatables-towables"
+		},
+		{
+			"slug": "water-slide",
+			"name": "Water Slide",
+			"category": "inflatables-towables"
+		},
+		{
+			"slug": "inflatable-platform",
+			"name": "Inflatable Platform",
+			"category": "inflatables-towables"
+		},
+		{
+			"slug": "trampoline",
+			"name": "Trampoline",
+			"category": "inflatables-towables"
+		},
+		{
+			"slug": "fishing-equipment",
+			"name": "Fishing Equipment",
+			"category": "fishing"
+		},
+		{
+			"slug": "spearfishing",
+			"name": "Spearfishing",
+			"category": "fishing"
+		},
+		{
+			"slug": "kitesurf",
+			"name": "Kitesurf",
+			"category": "sailing-wind"
+		},
+		{
+			"slug": "windsurf",
+			"name": "Windsurf",
+			"category": "sailing-wind"
+		},
+		{
+			"slug": "banana-boat",
+			"name": "Banana Boat",
+			"category": "other-water-toys"
+		},
+		{
+			"slug": "beach-setup",
+			"name": "Beach Setup",
+			"category": "other-water-toys"
+		},
+		{
+			"slug": "flybridge",
+			"name": "Flybridge",
+			"category": "equipment"
+		},
+		{
+			"slug": "water-maker",
+			"name": "Water maker",
+			"category": "equipment"
+		}
+	]
+}

@@ -356,6 +356,12 @@ final class ListingForm
                         <p class="oy-help"><?php esc_html_e('The wire allows: p, br, ul, ol, li, strong, em, h3, h4, https links. Anything else is stripped on save — the Text tab shows the exact source.', 'openyacht'); ?></p>
 
                         <h3 class="oy-section-h mt-8" style="font-size:13.5px;"><?php esc_html_e('Features', 'openyacht'); ?></h3>
+                        <p class="oy-section-sub mt-1"><?php esc_html_e('Free text — but a name matching the shared vocabulary travels with its well-known identifier, so partners can filter on it.', 'openyacht'); ?></p>
+                        <datalist id="oy_feature_names">
+                            <?php foreach ((new \OpenYacht\Federation\FeatureRegistry())->all() as $known) : ?>
+                                <option value="<?php echo esc_attr($known['name']); ?>"></option>
+                            <?php endforeach; ?>
+                        </datalist>
                         <?php
         $featureRows = $oldInput !== null
             ? array_values(array_filter((array) ($oldInput['features'] ?? []), 'is_array'))
@@ -484,7 +490,7 @@ final class ListingForm
     {
         ?>
         <div class="flex items-center gap-2" data-oy-block>
-            <input class="oy-input" name="oy[features][<?php echo esc_attr($index); ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="<?php esc_attr_e('Feature — e.g. Air conditioning', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature name', 'openyacht'); ?>">
+            <input class="oy-input" list="oy_feature_names" name="oy[features][<?php echo esc_attr($index); ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="<?php esc_attr_e('Feature — e.g. Air Conditioning', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature name', 'openyacht'); ?>">
             <input class="oy-input max-w-44" name="oy[features][<?php echo esc_attr($index); ?>][category]" value="<?php echo esc_attr($category); ?>" placeholder="<?php esc_attr_e('Category (optional)', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature category', 'openyacht'); ?>">
             <button type="button" class="oy-row-x" data-oy-remove-block aria-label="<?php esc_attr_e('Remove this feature', 'openyacht'); ?>">&times;</button>
         </div>
@@ -642,6 +648,7 @@ final class ListingForm
         }
 
         $features = [];
+        $registry = new \OpenYacht\Federation\FeatureRegistry();
 
         foreach ((array) ($input['features'] ?? []) as $row) {
             if (! is_array($row)) {
@@ -655,7 +662,15 @@ final class ListingForm
             }
 
             $category = strtolower(trim(sanitize_text_field((string) ($row['category'] ?? ''))));
-            $features[] = ['category' => $category !== '' ? $category : null, 'name' => $name, 'slug' => null];
+            // A registry match travels with its well-known slug (and its
+            // grouping when the broker typed none) — LS-11's never-invent
+            // rule holds because unmatched names keep slug null.
+            $match = $registry->matchName($name);
+            $features[] = [
+                'category' => $category !== '' ? $category : ($match['category'] ?? null),
+                'name' => $match['name'] ?? $name,
+                'slug' => $match['slug'] ?? null,
+            ];
         }
 
         return [
