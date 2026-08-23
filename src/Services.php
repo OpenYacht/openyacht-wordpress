@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OpenYacht;
 
 use OpenYacht\Federation\CopyRepository;
+use OpenYacht\Federation\InboundVerification;
 use OpenYacht\Federation\KeyEncryption;
 use OpenYacht\Federation\KeyManager;
 use OpenYacht\Federation\Logger;
@@ -13,6 +14,7 @@ use OpenYacht\Federation\PartnerService;
 use OpenYacht\Federation\SignedClient;
 use OpenYacht\Federation\Signer;
 use OpenYacht\Federation\SyncService;
+use OpenYacht\Federation\Verifier;
 use OpenYacht\Federation\WellKnownClient;
 use OpenYacht\Federation\WellKnownDocument;
 use OpenYacht\Federation\WpdbCopyRepository;
@@ -73,6 +75,16 @@ final class Services
     public static function wellKnownDocument(): WellKnownDocument
     {
         return self::$cache[__FUNCTION__] ??= new WellKnownDocument(self::keyManager());
+    }
+
+    public static function inboundVerification(): InboundVerification
+    {
+        return self::$cache[__FUNCTION__] ??= new InboundVerification(
+            new Verifier(),
+            self::partners(),
+            self::partnerService(),
+            self::logger(),
+        );
     }
 
     private static function wpdb(): \wpdb

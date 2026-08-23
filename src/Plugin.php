@@ -33,7 +33,7 @@ final class Plugin
             load_plugin_textdomain('openyacht', false, dirname(plugin_basename(OPENYACHT_FILE)) . '/languages');
         });
 
-        (new Router(Services::wellKnownDocument()))->register();
+        (new Router())->register();
 
         add_action(SyncRunner::HOOK, static function (): void {
             SyncRunner::run();
