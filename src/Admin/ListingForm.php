@@ -356,7 +356,7 @@ final class ListingForm
                         <p class="oy-help"><?php esc_html_e('The wire allows: p, br, ul, ol, li, strong, em, h3, h4, https links. Anything else is stripped on save — the Text tab shows the exact source.', 'openyacht'); ?></p>
 
                         <h3 class="oy-section-h mt-8" style="font-size:13.5px;"><?php esc_html_e('Features', 'openyacht'); ?></h3>
-                        <p class="oy-section-sub mt-1"><?php esc_html_e('Free text — but a name matching the shared vocabulary travels with its well-known identifier, so partners can filter on it.', 'openyacht'); ?></p>
+                        <p class="oy-section-sub mt-1"><?php esc_html_e('Free text — but a name matching the shared vocabulary travels with its well-known identifier, so partners can filter on it. Keep names singular (Seabob, not 2x Seabob) and put counts in the quantity box; empty means present, count unstated.', 'openyacht'); ?></p>
                         <datalist id="oy_feature_names">
                             <?php foreach ((new \OpenYacht\Federation\FeatureRegistry())->all() as $known) : ?>
                                 <option value="<?php echo esc_attr($known['name']); ?>"></option>
@@ -373,10 +373,10 @@ final class ListingForm
         ?>
                         <div class="mt-3 flex flex-col gap-2" data-oy-feature-rows>
                             <?php foreach ($featureRows as $i => $row) : ?>
-                                <?php $this->featureRow((string) $i, (string) ($row['name'] ?? ''), (string) ($row['category'] ?? '')); ?>
+                                <?php $this->featureRow((string) $i, (string) ($row['name'] ?? ''), (string) ($row['category'] ?? ''), isset($row['quantity']) && is_numeric($row['quantity']) ? (string) (int) $row['quantity'] : ''); ?>
                             <?php endforeach; ?>
                         </div>
-                        <template id="oy_feature_template"><?php $this->featureRow('__INDEX__', '', ''); ?></template>
+                        <template id="oy_feature_template"><?php $this->featureRow('__INDEX__', '', '', ''); ?></template>
                         <button type="button" class="oy-btn oy-btn-ghost mt-3" id="oy_feature_add"><?php esc_html_e('Add feature', 'openyacht'); ?></button>
                     </section>
                     <hr class="oy-rule">
@@ -675,12 +675,13 @@ final class ListingForm
         <?php
     }
 
-    private function featureRow(string $index, string $name, string $category): void
+    private function featureRow(string $index, string $name, string $category, string $quantity = ''): void
     {
         ?>
         <div class="flex items-center gap-2" data-oy-block>
             <input class="oy-input" list="oy_feature_names" name="oy[features][<?php echo esc_attr($index); ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="<?php esc_attr_e('Feature — e.g. Air Conditioning', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature name', 'openyacht'); ?>">
             <input class="oy-input max-w-44" name="oy[features][<?php echo esc_attr($index); ?>][category]" value="<?php echo esc_attr($category); ?>" placeholder="<?php esc_attr_e('Category (optional)', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature category', 'openyacht'); ?>">
+            <input class="oy-input max-w-16" type="number" min="1" step="1" name="oy[features][<?php echo esc_attr($index); ?>][quantity]" value="<?php echo esc_attr($quantity); ?>" placeholder="<?php esc_attr_e('Qty', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Quantity — leave empty for present, count unstated', 'openyacht'); ?>">
             <button type="button" class="oy-row-x" data-oy-remove-block aria-label="<?php esc_attr_e('Remove this feature', 'openyacht'); ?>">&times;</button>
         </div>
         <?php
@@ -849,10 +850,14 @@ final class ListingForm
             // grouping when the broker typed none) — LS-11's never-invent
             // rule holds because unmatched names keep slug null.
             $match = $registry->matchName($name);
+            $quantity = isset($row['quantity']) && is_numeric($row['quantity']) && (int) $row['quantity'] >= 1
+                ? (int) $row['quantity']
+                : null;
             $features[] = [
                 'category' => $category !== '' ? $category : ($match['category'] ?? null),
                 'name' => $match['name'] ?? $name,
                 'slug' => $match['slug'] ?? null,
+                'quantity' => $quantity,
             ];
         }
 

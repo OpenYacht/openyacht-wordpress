@@ -2,7 +2,7 @@
 	"registry": "openyacht-features",
 	"version": "2026.08.0",
 	"canonical_url": "https://openyacht.org/registry/features.json",
-	"notes": "DRAFT (proposed 2026-08-23; not yet adopted). Well-known feature slugs for the OpenYacht protocol — the non-normative list listing-schema.md §Features says is maintained alongside the other vocabulary curation material. Seeded from the Worth Avenue intranet's production reference data (amenities + water toys) plus the spec's named examples and common systems/deck/entertainment equipment the amenities+toys data does not cover. name is free text on the wire; a slug is sent only when the feature matches an entry here. category is the entry's grouping label, not an enum.",
+	"notes": "Well-known feature slugs for the OpenYacht protocol — the non-normative slug list referenced by listing-schema.md §Features. A feature's name is free text on the wire and always display truth; a slug is sent only when the feature matches an entry here, and an unmatched feature is sent with slug null — this list never gates what a feature can be. The category on each entry is this registry's own grouping label for curation and display, not an enum: the category an authority sends on the wire is its own label and need not match this file. Where entries overlap in specificity, authorities should send the most specific entry that is true (stabilizers-anchor over stabilizers, hydraulic-swim-platform over swim-platform), never both. Versioned like the other registries: date-based, vendored, never fetched at request time. Additions via pull request to this repository.",
 	"features": [
 		{
 			"slug": "air-conditioning",
@@ -10,14 +10,14 @@
 			"category": "comfort-luxury"
 		},
 		{
-			"slug": "deck-jacuzzi",
-			"name": "Deck Jacuzzi",
+			"slug": "jacuzzi",
+			"name": "Jacuzzi",
 			"category": "comfort-luxury"
 		},
 		{
 			"slug": "wifi",
 			"name": "WiFi",
-			"category": "comfort-luxury"
+			"category": "connectivity"
 		},
 		{
 			"slug": "elevator",
@@ -25,9 +25,14 @@
 			"category": "comfort-luxury"
 		},
 		{
-			"slug": "tower",
-			"name": "Tower",
-			"category": "comfort-luxury"
+			"slug": "wakeboard-tower",
+			"name": "Wakeboard Tower",
+			"category": "water-sports"
+		},
+		{
+			"slug": "tuna-tower",
+			"name": "Tuna Tower",
+			"category": "fishing"
 		},
 		{
 			"slug": "full-beam-master",
@@ -50,24 +55,29 @@
 			"category": "fitness-wellness"
 		},
 		{
-			"slug": "stabilisers-anchor",
-			"name": "Stabilisers at Anchor",
+			"slug": "stabilizers",
+			"name": "Stabilizers",
 			"category": "stability-safety"
 		},
 		{
-			"slug": "stabilisers-underway",
-			"name": "Stabilisers Underway",
+			"slug": "stabilizers-anchor",
+			"name": "Stabilizers at Anchor",
+			"category": "stability-safety"
+		},
+		{
+			"slug": "stabilizers-underway",
+			"name": "Stabilizers Underway",
 			"category": "stability-safety"
 		},
 		{
 			"slug": "helipad",
 			"name": "Helipad",
-			"category": "stability-safety"
+			"category": "deck-exterior"
 		},
 		{
 			"slug": "wheelchair-accessible",
 			"name": "Wheelchair Accessible",
-			"category": "stability-safety"
+			"category": "accessibility"
 		},
 		{
 			"slug": "bow-thrusters",
@@ -216,7 +226,7 @@
 		},
 		{
 			"slug": "water-maker",
-			"name": "Water maker",
+			"name": "Water Maker",
 			"category": "systems-equipment"
 		},
 		{
@@ -332,7 +342,7 @@
 		{
 			"slug": "starlink",
 			"name": "Starlink",
-			"category": "entertainment"
+			"category": "connectivity"
 		},
 		{
 			"slug": "audio-system",

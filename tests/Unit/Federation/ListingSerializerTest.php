@@ -218,6 +218,24 @@ final class ListingSerializerTest extends TestCase
         self::assertSame([], $serializer->serialize($this->listing(), $this->partner([]))['media']['documents'], 'documents group withheld: emptied');
     }
 
+    #[Group('LS-1')]
+    public function testFeatureQuantityIsEmittedAndBackfilledForOlderStoredFeatures(): void
+    {
+        $listing = new Listing(...array_replace(
+            $this->listingConstructorArgs($this->listing()),
+            ['features' => [
+                // Stored before quantity joined the wire shape (2026.08).
+                ['category' => 'entertainment', 'name' => 'Imaginary cinema', 'slug' => null],
+                ['category' => 'water-sports', 'name' => 'Seabob', 'slug' => 'seabob', 'quantity' => 2],
+            ]],
+        ));
+
+        $wire = $this->serializer()->serialize($listing, null);
+
+        self::assertNull($wire['features'][0]['quantity'], 'missing quantity backfills as present-count-unstated');
+        self::assertSame(2, $wire['features'][1]['quantity'], 'a stated count survives');
+    }
+
     #[Group('API-3')]
     public function testTombstoneForm(): void
     {

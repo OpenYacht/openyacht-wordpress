@@ -63,7 +63,13 @@ final class ListingSerializer
             'listing' => $this->listing($listing, $granted(FieldGroup::Pricing), $granted(FieldGroup::LocationExact), $granted(FieldGroup::History)),
             'specifications' => $this->specifications($listing),
             'descriptions' => array_values($listing->descriptions),
-            'features' => array_values($listing->features),
+            'features' => array_values(array_map(
+                // quantity joined the wire shape in 2026.08 — stored
+                // features from before it default to "present, count
+                // unstated" so every payload carries the full shape.
+                static fn (array $feature): array => $feature + ['quantity' => null],
+                $listing->features,
+            )),
             'media' => $this->mediaBlock($listing, $granted(FieldGroup::Documents)),
             'charter' => null,
             'usage' => $this->usage(),
