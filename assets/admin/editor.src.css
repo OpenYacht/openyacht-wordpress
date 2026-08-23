@@ -194,53 +194,6 @@
         text-transform: capitalize;
     }
 
-    /* Feature rows: the vocabulary-link chip sits inside the name cell. */
-    .oy-feature-name {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-
-    .oy-feature-name .oy-input {
-        flex: 1;
-        min-width: 0;
-    }
-
-    .oy-chip-slug {
-        flex: none;
-        background: color-mix(in srgb, var(--color-brass) 10%, transparent);
-        color: var(--color-brass);
-        border: 1px solid color-mix(in srgb, var(--color-brass) 30%, transparent);
-        font-family: Consolas, Menlo, monospace;
-        font-weight: 500;
-    }
-
-    .oy-chip-slug button {
-        background: none;
-        border: 0;
-        padding: 0 0 0 2px;
-        color: inherit;
-        font-size: 13px;
-        line-height: 1;
-        cursor: pointer;
-        opacity: 0.7;
-    }
-
-    .oy-chip-slug button:hover {
-        opacity: 1;
-    }
-
-    /* The text no longer supports the linked entry — question it loudly. */
-    .oy-chip-slug.is-adrift {
-        background: color-mix(in srgb, var(--color-alert) 10%, transparent);
-        color: var(--color-alert);
-        border-color: color-mix(in srgb, var(--color-alert) 35%, transparent);
-    }
-
-    .oy-chip-slug.is-adrift [data-oy-slug-label]::before {
-        content: "⚠ ";
-    }
-
     .oy-chip-status.is-active {
         background: var(--color-tide-soft);
         color: var(--color-tide);

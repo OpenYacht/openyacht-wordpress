@@ -356,12 +356,16 @@ final class ListingForm
                         <p class="oy-help"><?php esc_html_e('The wire allows: p, br, ul, ol, li, strong, em, h3, h4, https links. Anything else is stripped on save — the Text tab shows the exact source.', 'openyacht'); ?></p>
 
                         <h3 class="oy-section-h mt-8" style="font-size:13.5px;"><?php esc_html_e('Features', 'openyacht'); ?></h3>
-                        <p class="oy-section-sub mt-1"><?php esc_html_e('Free text — but a name matching the shared vocabulary travels with its well-known identifier, so partners can filter on it. Keep names singular (Seabob, not 2x Seabob) and put counts in the quantity box; empty means present, count unstated.', 'openyacht'); ?></p>
-                        <datalist id="oy_feature_names">
-                            <?php foreach ((new \OpenYacht\Federation\FeatureRegistry())->all() as $known) : ?>
-                                <option value="<?php echo esc_attr($known['name']); ?>"></option>
-                            <?php endforeach; ?>
-                        </datalist>
+                        <p class="oy-section-sub mt-1"><?php esc_html_e('Pick the closest vocabulary entry — it fills the name and category, and partners filter on it. The name and category stay yours to reword; keep names singular (Seabob, not 2x Seabob) and put counts in the quantity box, where empty means present, count unstated. Nothing fits? Set No link and type freely.', 'openyacht'); ?></p>
+                        <script type="application/json" id="oy_feature_slug_options"><?php
+                            $featureOptions = [['value' => '', 'label' => __('— No link —', 'openyacht'), 'hint' => '']];
+
+        foreach ((new \OpenYacht\Federation\FeatureRegistry())->all() as $known) {
+            $featureOptions[] = ['value' => $known['slug'], 'label' => $known['name'], 'hint' => (string) $known['category']];
+        }
+
+        echo wp_json_encode($featureOptions, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG);
+        ?></script>
                         <?php
         $featureRows = $oldInput !== null
             ? array_values(array_filter((array) ($oldInput['features'] ?? []), 'is_array'))
@@ -377,15 +381,6 @@ final class ListingForm
                             <?php endforeach; ?>
                         </div>
                         <template id="oy_feature_template"><?php $this->featureRow('__INDEX__', '', '', '', ''); ?></template>
-                        <script type="application/json" id="oy_feature_registry"><?php
-                            $registryMap = [];
-
-        foreach ((new \OpenYacht\Federation\FeatureRegistry())->all() as $known) {
-            $registryMap[strtolower($known['name'])] = ['slug' => $known['slug'], 'category' => $known['category']];
-        }
-
-        echo wp_json_encode($registryMap);
-        ?></script>
                         <button type="button" class="oy-btn oy-btn-ghost mt-3" id="oy_feature_add"><?php esc_html_e('Add feature', 'openyacht'); ?></button>
                     </section>
                     <hr class="oy-rule">
@@ -685,23 +680,22 @@ final class ListingForm
     }
 
     /**
-     * The name is display truth and stays editable; the slug is the sticky
-     * interop link. Typing a registry name auto-links (chip appears, the
-     * category fills if empty); rewording the text keeps the link; the
-     * chip's ✕ unlinks. The server accepts only registry-known slugs.
+     * The slug select drives the row: picking a vocabulary entry autofills
+     * the name and category, which stay editable — the name is display
+     * truth, the slug is the identity partners filter on. "No link" sends
+     * the free text with slug null. The server accepts only registry-known
+     * slugs either way.
      */
     private function featureRow(string $index, string $name, string $category, string $quantity = '', string $slug = ''): void
     {
         ?>
         <div class="flex items-center gap-2" data-oy-block>
-            <span class="oy-feature-name flex-1 min-w-0">
-                <input class="oy-input" list="oy_feature_names" name="oy[features][<?php echo esc_attr($index); ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="<?php esc_attr_e('Feature — e.g. Air Conditioning', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature name', 'openyacht'); ?>" data-oy-feature-name>
-                <span class="oy-chip oy-chip-slug" data-oy-slug-chip <?php echo $slug === '' ? 'style="display:none"' : ''; ?>>
-                    <span data-oy-slug-label><?php echo esc_html($slug); ?></span>
-                    <button type="button" data-oy-slug-unlink aria-label="<?php esc_attr_e('Unlink from the shared vocabulary', 'openyacht'); ?>" title="<?php esc_attr_e('Unlink — the name will travel without an identifier', 'openyacht'); ?>">&times;</button>
-                </span>
-                <input type="hidden" name="oy[features][<?php echo esc_attr($index); ?>][slug]" value="<?php echo esc_attr($slug); ?>" data-oy-feature-slug>
-            </span>
+            <div class="oy-combobox w-56 shrink-0 max-[900px]:w-40" data-oy-combobox data-oy-combobox-source="oy_feature_slug_options" data-oy-feature-slug>
+                <input type="hidden" name="oy[features][<?php echo esc_attr($index); ?>][slug]" value="<?php echo esc_attr($slug); ?>">
+                <input type="text" class="oy-input" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="oy_feature_list_<?php echo esc_attr($index); ?>" autocomplete="off" placeholder="<?php esc_attr_e('Vocabulary…', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Shared vocabulary entry', 'openyacht'); ?>" data-oy-combobox-input>
+                <ul class="oy-combobox-list" id="oy_feature_list_<?php echo esc_attr($index); ?>" role="listbox" aria-label="<?php echo esc_attr__('Feature vocabulary', 'openyacht'); ?>" data-empty-text="<?php esc_attr_e('No match — pick No link and use free text', 'openyacht'); ?>" hidden></ul>
+            </div>
+            <input class="oy-input flex-1 min-w-0" name="oy[features][<?php echo esc_attr($index); ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="<?php esc_attr_e('Display name — e.g. Air Conditioning', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature name', 'openyacht'); ?>" data-oy-feature-name>
             <input class="oy-input max-w-44" name="oy[features][<?php echo esc_attr($index); ?>][category]" value="<?php echo esc_attr($category); ?>" placeholder="<?php esc_attr_e('Category (optional)', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature category', 'openyacht'); ?>" data-oy-feature-category>
             <input class="oy-input max-w-16" type="number" min="1" step="1" name="oy[features][<?php echo esc_attr($index); ?>][quantity]" value="<?php echo esc_attr($quantity); ?>" placeholder="<?php esc_attr_e('Qty', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Quantity — leave empty for present, count unstated', 'openyacht'); ?>">
             <button type="button" class="oy-row-x" data-oy-remove-block aria-label="<?php esc_attr_e('Remove this feature', 'openyacht'); ?>">&times;</button>
@@ -868,14 +862,15 @@ final class ListingForm
             }
 
             $category = strtolower(trim(sanitize_text_field((string) ($row['category'] ?? ''))));
-            // The name is display truth; the slug is the sticky link the
-            // editor maintains. An explicitly submitted slug wins when the
-            // registry knows it — the broker linked it, then possibly
-            // reworded the text. Otherwise fall back to name matching.
-            // Either way LS-11's never-invent rule holds: only registry
-            // entries produce slugs, and unmatched names keep slug null.
-            $submitted = sanitize_key((string) ($row['slug'] ?? ''));
-            $match = ($submitted !== '' ? $registry->matchSlug($submitted) : null) ?? $registry->matchName($name);
+            // The slug select is the authority: a registry-known slug
+            // links, an explicit "No link" stays unlinked even when the
+            // name happens to match an entry. Name matching is only the
+            // fallback for input with no slug field at all. LS-11's
+            // never-invent rule holds either way: only registry entries
+            // produce slugs.
+            $match = array_key_exists('slug', $row)
+                ? $registry->matchSlug(sanitize_key((string) $row['slug']))
+                : $registry->matchName($name);
             $quantity = isset($row['quantity']) && is_numeric($row['quantity']) && (int) $row['quantity'] >= 1
                 ? (int) $row['quantity']
                 : null;

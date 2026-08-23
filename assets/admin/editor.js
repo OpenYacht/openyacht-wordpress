@@ -16,7 +16,10 @@
 		var hidden = root.querySelector('input[type="hidden"]');
 		var input = root.querySelector('[data-oy-combobox-input]');
 		var list = root.querySelector('[role="listbox"]');
-		var source = root.querySelector('[data-oy-combobox-options]');
+		// Repeated comboboxes (feature rows) share one options tag by id
+		// instead of embedding the list in every row.
+		var sourceId = root.getAttribute('data-oy-combobox-source');
+		var source = sourceId ? document.getElementById(sourceId) : root.querySelector('[data-oy-combobox-options]');
 
 		if (!hidden || !input || !list || !source) {
 			return;
@@ -491,114 +494,35 @@
 	/* ---------- feature slug linking ---------- */
 
 	/**
-	 * The name is display truth; the slug is the sticky vocabulary link.
-	 * Matching is whole-word containment, longest entry first, so
-	 * "Seabob x 10" and "Seabob F5 SR" both (re)link seabob — replacing
-	 * one linked name with another registry name relinks rather than
-	 * keeping the stale slug. Text that no longer contains the linked
-	 * entry's name keeps the link but turns the chip into a visible
-	 * drift warning; the chip's ✕ unlinks. The server re-validates every
-	 * slug against the registry.
+	 * The slug select drives the feature row: picking a vocabulary entry
+	 * autofills the name and category, which stay editable afterwards —
+	 * the visible slug is the identity, the text is display truth. To
+	 * mean something else, change the slug (or set it to No link).
 	 */
-	function initFeatureLinks() {
+	function initFeatureRows() {
 		var container = document.querySelector('[data-oy-feature-rows]');
-		var registryTag = document.getElementById('oy_feature_registry');
 
-		if (!container || !registryTag) {
+		if (!container) {
 			return;
 		}
 
-		var registry;
-		try {
-			registry = JSON.parse(registryTag.textContent);
-		} catch (e) {
-			return;
-		}
+		container.addEventListener('oy:combobox-change', function (event) {
+			var slugBox = event.target.closest('[data-oy-feature-slug]');
 
-		var namesByLength = Object.keys(registry).sort(function (a, b) { return b.length - a.length; });
-
-		function wordContains(haystack, needle) {
-			var idx = haystack.indexOf(needle);
-			while (idx !== -1) {
-				var before = idx > 0 ? haystack[idx - 1] : '';
-				var after = idx + needle.length < haystack.length ? haystack[idx + needle.length] : '';
-				if (!/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after)) {
-					return true;
-				}
-				idx = haystack.indexOf(needle, idx + 1);
-			}
-			return false;
-		}
-
-		function findMatch(text) {
-			var t = text.trim().toLowerCase();
-			if (!t) {
-				return null;
-			}
-			if (registry[t]) {
-				return registry[t];
-			}
-			for (var i = 0; i < namesByLength.length; i++) {
-				if (wordContains(t, namesByLength[i])) {
-					return registry[namesByLength[i]];
-				}
-			}
-			return null;
-		}
-
-		function setLink(row, slug, adrift) {
-			var input = row.querySelector('[data-oy-feature-slug]');
-			var chip = row.querySelector('[data-oy-slug-chip]');
-			if (!input || !chip) {
+			if (!slugBox || !event.detail || event.detail.value === '') {
 				return;
 			}
-			input.value = slug;
-			chip.style.display = slug ? '' : 'none';
-			chip.classList.toggle('is-adrift', !!adrift);
-			chip.querySelector('[data-oy-slug-label]').textContent = slug;
-			chip.title = adrift
-				? 'The text no longer matches this linked feature — unlink if the link is wrong'
-				: 'Linked to the shared vocabulary — partners can filter on this';
-		}
 
-		function evaluate(row, fillCategory) {
-			var nameInput = row.querySelector('[data-oy-feature-name]');
-			var slugInput = row.querySelector('[data-oy-feature-slug]');
-			if (!nameInput || !slugInput) {
-				return;
+			var row = slugBox.closest('[data-oy-block]');
+			var name = row.querySelector('[data-oy-feature-name]');
+			var category = row.querySelector('[data-oy-feature-category]');
+
+			if (name) {
+				name.value = event.detail.label;
 			}
-			var match = findMatch(nameInput.value);
-
-			if (match) {
-				setLink(row, match.slug, false);
-				var category = row.querySelector('[data-oy-feature-category]');
-				if (fillCategory && category && category.value.trim() === '' && match.category) {
-					category.value = match.category;
-				}
-			} else if (nameInput.value.trim() === '') {
-				setLink(row, '', false); // cleared name: nothing left to link
-			} else if (slugInput.value) {
-				// Names are changeable, slugs are not — but a link the text
-				// no longer supports must be visibly questionable.
-				setLink(row, slugInput.value, true);
+			if (category && event.detail.hint) {
+				category.value = event.detail.hint;
 			}
-		}
-
-		container.addEventListener('input', function (event) {
-			if (event.target.hasAttribute('data-oy-feature-name')) {
-				evaluate(event.target.closest('[data-oy-block]'), true);
-			}
-		});
-
-		container.addEventListener('click', function (event) {
-			if (event.target.closest('[data-oy-slug-unlink]')) {
-				setLink(event.target.closest('[data-oy-block]'), '', false);
-			}
-		});
-
-		// Rows arriving from the server may already be adrift.
-		container.querySelectorAll('[data-oy-block]').forEach(function (row) {
-			evaluate(row, false);
 		});
 	}
 
@@ -610,7 +534,9 @@
 		initMap();
 		initEnterGuard();
 		initDescriptionBlocks();
-		initRepeater('[data-oy-feature-rows]', 'oy_feature_template', 'oy_feature_add');
-		initFeatureLinks();
+		initRepeater('[data-oy-feature-rows]', 'oy_feature_template', 'oy_feature_add', function (block) {
+			block.querySelectorAll('[data-oy-combobox]').forEach(initCombobox);
+		});
+		initFeatureRows();
 	});
 })();
