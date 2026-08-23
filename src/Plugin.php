@@ -5,10 +5,6 @@ declare(strict_types=1);
 namespace OpenYacht;
 
 use OpenYacht\Admin\Settings;
-use OpenYacht\Federation\KeyEncryption;
-use OpenYacht\Federation\KeyManager;
-use OpenYacht\Federation\WellKnownDocument;
-use OpenYacht\Federation\WpdbKeyRepository;
 use OpenYacht\Http\Router;
 
 final class Plugin
@@ -37,11 +33,40 @@ final class Plugin
             load_plugin_textdomain('openyacht', false, dirname(plugin_basename(OPENYACHT_FILE)) . '/languages');
         });
 
-        $keys = new KeyManager(new WpdbKeyRepository($wpdb, KeyEncryption::fromWpSalts()));
-        (new Router(new WellKnownDocument($keys)))->register();
+        (new Router(Services::wellKnownDocument()))->register();
+
+        add_action(SyncRunner::HOOK, static function (): void {
+            SyncRunner::run();
+        });
+
+        if (! wp_next_scheduled(SyncRunner::HOOK)) {
+            wp_schedule_event(time(), 'hourly', SyncRunner::HOOK);
+        }
+
+        if (defined('WP_CLI') && constant('WP_CLI')) {
+            \WP_CLI::add_command('openyacht', Cli\RootCommand::class);
+            \WP_CLI::add_command('openyacht partner', Cli\PartnerCommand::class);
+            \WP_CLI::add_command('openyacht key', Cli\KeyCommand::class);
+        }
 
         if (is_admin()) {
             (new Settings())->register();
+            add_action('admin_notices', [$this, 'syncWatchdogNotice']);
         }
+    }
+
+    /**
+     * Conformance watchdog: wp-cron is visit-triggered, so a quiet site can
+     * sleep past the 24-hour copy-freshness obligation (ID-7). Surface it.
+     */
+    public function syncWatchdogNotice(): void
+    {
+        if (! current_user_can('manage_options') || ! SyncRunner::isOverdue()) {
+            return;
+        }
+
+        echo '<div class="notice notice-warning"><p><strong>' . esc_html__('OpenYacht: partner sync is overdue.', 'openyacht') . '</strong> ';
+        echo esc_html__('WordPress cron only runs when the site gets visits, and no sync pass has completed recently — synced listings may fall behind the 24-hour freshness obligation. Run "wp openyacht sync" or point a system cron at wp-cron.php.', 'openyacht');
+        echo '</p></div>';
     }
 }

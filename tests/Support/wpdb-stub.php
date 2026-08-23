@@ -46,6 +46,20 @@ class wpdb
         return 1;
     }
 
+    /** @var list<array{table: string, data: array<string, mixed>, where: array<string, mixed>}> */
+    public array $updated = [];
+
+    /**
+     * @param array<string, mixed> $data
+     * @param array<string, mixed> $where
+     */
+    public function update(string $table, array $data, array $where): int
+    {
+        $this->updated[] = ['table' => $table, 'data' => $data, 'where' => $where];
+
+        return 1;
+    }
+
     public function prepare(string $query, mixed ...$args): string
     {
         $query = str_replace(['%s', '%d'], ["'%s'", '%d'], $query);

@@ -17,6 +17,7 @@
 declare(strict_types=1);
 
 use OpenYacht\Activation;
+use OpenYacht\Deactivation;
 use OpenYacht\Plugin;
 
 if (! defined('ABSPATH')) {
@@ -42,5 +43,6 @@ if (! file_exists($openyacht_autoload)) {
 require $openyacht_autoload;
 
 register_activation_hook(__FILE__, [Activation::class, 'activate']);
+register_deactivation_hook(__FILE__, [Deactivation::class, 'deactivate']);
 
 add_action('plugins_loaded', [Plugin::class, 'boot']);
