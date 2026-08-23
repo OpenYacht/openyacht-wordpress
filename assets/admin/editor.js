@@ -488,6 +488,67 @@
 		});
 	}
 
+	/* ---------- feature slug linking ---------- */
+
+	/**
+	 * The name is display truth; the slug is the sticky vocabulary link.
+	 * Typing a registry name auto-links the row (chip appears, category
+	 * fills if empty); rewording the text keeps the link; the chip's ✕
+	 * unlinks. The server re-validates every slug against the registry.
+	 */
+	function initFeatureLinks() {
+		var container = document.querySelector('[data-oy-feature-rows]');
+		var registryTag = document.getElementById('oy_feature_registry');
+
+		if (!container || !registryTag) {
+			return;
+		}
+
+		var registry;
+		try {
+			registry = JSON.parse(registryTag.textContent);
+		} catch (e) {
+			return;
+		}
+
+		function setLink(row, slug) {
+			var input = row.querySelector('[data-oy-feature-slug]');
+			var chip = row.querySelector('[data-oy-slug-chip]');
+			if (!input || !chip) {
+				return;
+			}
+			input.value = slug;
+			chip.style.display = slug ? '' : 'none';
+			chip.querySelector('[data-oy-slug-label]').textContent = slug;
+		}
+
+		container.addEventListener('input', function (event) {
+			if (!event.target.hasAttribute('data-oy-feature-name')) {
+				return;
+			}
+			var row = event.target.closest('[data-oy-block]');
+			var entry = registry[event.target.value.trim().toLowerCase()];
+
+			if (entry) {
+				setLink(row, entry.slug);
+				var category = row.querySelector('[data-oy-feature-category]');
+				if (category && category.value.trim() === '' && entry.category) {
+					category.value = entry.category;
+				}
+			} else if (event.target.value.trim() === '') {
+				setLink(row, ''); // cleared name: nothing left to link
+			}
+			// Non-matching text keeps an existing link — names are
+			// changeable, slugs are not.
+		});
+
+		container.addEventListener('click', function (event) {
+			if (event.target.closest('[data-oy-slug-unlink]')) {
+				setLink(event.target.closest('[data-oy-block]'), '');
+			}
+		});
+	}
+
 	document.addEventListener('DOMContentLoaded', function () {
 		document.querySelectorAll('[data-oy-combobox]').forEach(initCombobox);
 		initRail();
@@ -497,5 +558,6 @@
 		initEnterGuard();
 		initDescriptionBlocks();
 		initRepeater('[data-oy-feature-rows]', 'oy_feature_template', 'oy_feature_add');
+		initFeatureLinks();
 	});
 })();

@@ -32,6 +32,16 @@ final class FeatureRegistryTest extends TestCase
         self::assertNull($this->registry()->matchName('Imaginary cinema'));
     }
 
+    public function testMatchSlugAcceptsOnlyRegistrySlugs(): void
+    {
+        $match = $this->registry()->matchSlug('stabilizers-anchor');
+
+        self::assertNotNull($match);
+        self::assertSame('Stabilizers at Anchor', $match['name']);
+        self::assertNull($this->registry()->matchSlug('stabilisers-anchor'), 'draft-era British slug is not in the published registry');
+        self::assertNull($this->registry()->matchSlug('made-up'));
+    }
+
     public function testVendoredCountriesLoad(): void
     {
         $countries = new Countries(dirname(__DIR__, 3) . '/resources/data/countries.json');

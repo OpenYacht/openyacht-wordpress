@@ -36,6 +36,22 @@ class FeatureRegistry
     }
 
     /**
+     * @return array{slug: string, name: string, category: string|null}|null
+     */
+    public function matchSlug(string $slug): ?array
+    {
+        $this->load();
+
+        foreach ((array) $this->byName as $entry) {
+            if ($entry['slug'] === $slug) {
+                return $entry;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @return list<array{slug: string, name: string, category: string|null}>
      */
     public function all(): array

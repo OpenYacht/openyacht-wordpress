@@ -373,10 +373,19 @@ final class ListingForm
         ?>
                         <div class="mt-3 flex flex-col gap-2" data-oy-feature-rows>
                             <?php foreach ($featureRows as $i => $row) : ?>
-                                <?php $this->featureRow((string) $i, (string) ($row['name'] ?? ''), (string) ($row['category'] ?? ''), isset($row['quantity']) && is_numeric($row['quantity']) ? (string) (int) $row['quantity'] : ''); ?>
+                                <?php $this->featureRow((string) $i, (string) ($row['name'] ?? ''), (string) ($row['category'] ?? ''), isset($row['quantity']) && is_numeric($row['quantity']) ? (string) (int) $row['quantity'] : '', (string) ($row['slug'] ?? '')); ?>
                             <?php endforeach; ?>
                         </div>
-                        <template id="oy_feature_template"><?php $this->featureRow('__INDEX__', '', '', ''); ?></template>
+                        <template id="oy_feature_template"><?php $this->featureRow('__INDEX__', '', '', '', ''); ?></template>
+                        <script type="application/json" id="oy_feature_registry"><?php
+                            $registryMap = [];
+
+        foreach ((new \OpenYacht\Federation\FeatureRegistry())->all() as $known) {
+            $registryMap[strtolower($known['name'])] = ['slug' => $known['slug'], 'category' => $known['category']];
+        }
+
+        echo wp_json_encode($registryMap);
+        ?></script>
                         <button type="button" class="oy-btn oy-btn-ghost mt-3" id="oy_feature_add"><?php esc_html_e('Add feature', 'openyacht'); ?></button>
                     </section>
                     <hr class="oy-rule">
@@ -675,12 +684,25 @@ final class ListingForm
         <?php
     }
 
-    private function featureRow(string $index, string $name, string $category, string $quantity = ''): void
+    /**
+     * The name is display truth and stays editable; the slug is the sticky
+     * interop link. Typing a registry name auto-links (chip appears, the
+     * category fills if empty); rewording the text keeps the link; the
+     * chip's ✕ unlinks. The server accepts only registry-known slugs.
+     */
+    private function featureRow(string $index, string $name, string $category, string $quantity = '', string $slug = ''): void
     {
         ?>
         <div class="flex items-center gap-2" data-oy-block>
-            <input class="oy-input" list="oy_feature_names" name="oy[features][<?php echo esc_attr($index); ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="<?php esc_attr_e('Feature — e.g. Air Conditioning', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature name', 'openyacht'); ?>">
-            <input class="oy-input max-w-44" name="oy[features][<?php echo esc_attr($index); ?>][category]" value="<?php echo esc_attr($category); ?>" placeholder="<?php esc_attr_e('Category (optional)', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature category', 'openyacht'); ?>">
+            <span class="oy-feature-name flex-1 min-w-0">
+                <input class="oy-input" list="oy_feature_names" name="oy[features][<?php echo esc_attr($index); ?>][name]" value="<?php echo esc_attr($name); ?>" placeholder="<?php esc_attr_e('Feature — e.g. Air Conditioning', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature name', 'openyacht'); ?>" data-oy-feature-name>
+                <span class="oy-chip oy-chip-slug" data-oy-slug-chip <?php echo $slug === '' ? 'style="display:none"' : ''; ?>>
+                    <span data-oy-slug-label><?php echo esc_html($slug); ?></span>
+                    <button type="button" data-oy-slug-unlink aria-label="<?php esc_attr_e('Unlink from the shared vocabulary', 'openyacht'); ?>" title="<?php esc_attr_e('Unlink — the name will travel without an identifier', 'openyacht'); ?>">&times;</button>
+                </span>
+                <input type="hidden" name="oy[features][<?php echo esc_attr($index); ?>][slug]" value="<?php echo esc_attr($slug); ?>" data-oy-feature-slug>
+            </span>
+            <input class="oy-input max-w-44" name="oy[features][<?php echo esc_attr($index); ?>][category]" value="<?php echo esc_attr($category); ?>" placeholder="<?php esc_attr_e('Category (optional)', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Feature category', 'openyacht'); ?>" data-oy-feature-category>
             <input class="oy-input max-w-16" type="number" min="1" step="1" name="oy[features][<?php echo esc_attr($index); ?>][quantity]" value="<?php echo esc_attr($quantity); ?>" placeholder="<?php esc_attr_e('Qty', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Quantity — leave empty for present, count unstated', 'openyacht'); ?>">
             <button type="button" class="oy-row-x" data-oy-remove-block aria-label="<?php esc_attr_e('Remove this feature', 'openyacht'); ?>">&times;</button>
         </div>
@@ -846,16 +868,20 @@ final class ListingForm
             }
 
             $category = strtolower(trim(sanitize_text_field((string) ($row['category'] ?? ''))));
-            // A registry match travels with its well-known slug (and its
-            // grouping when the broker typed none) — LS-11's never-invent
-            // rule holds because unmatched names keep slug null.
-            $match = $registry->matchName($name);
+            // The name is display truth; the slug is the sticky link the
+            // editor maintains. An explicitly submitted slug wins when the
+            // registry knows it — the broker linked it, then possibly
+            // reworded the text. Otherwise fall back to name matching.
+            // Either way LS-11's never-invent rule holds: only registry
+            // entries produce slugs, and unmatched names keep slug null.
+            $submitted = sanitize_key((string) ($row['slug'] ?? ''));
+            $match = ($submitted !== '' ? $registry->matchSlug($submitted) : null) ?? $registry->matchName($name);
             $quantity = isset($row['quantity']) && is_numeric($row['quantity']) && (int) $row['quantity'] >= 1
                 ? (int) $row['quantity']
                 : null;
             $features[] = [
                 'category' => $category !== '' ? $category : ($match['category'] ?? null),
-                'name' => $match['name'] ?? $name,
+                'name' => $name,
                 'slug' => $match['slug'] ?? null,
                 'quantity' => $quantity,
             ];
