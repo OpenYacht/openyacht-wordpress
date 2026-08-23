@@ -58,6 +58,9 @@ final class ListingForm
         $selectedIds = $oldInput !== null
             ? array_map('intval', (array) ($oldInput['audience_partners'] ?? []))
             : ($listing !== null ? Services::audience()->partnersForListing($listing->id) : []);
+        $selectedGroupIds = $oldInput !== null
+            ? array_map('intval', (array) ($oldInput['audience_groups'] ?? []))
+            : ($listing !== null ? Services::partnerGroups()->groupIdsForListing($listing->id) : []);
 
         $sections = [
             'oy-identity' => __('Identity', 'openyacht'),
@@ -433,9 +436,7 @@ final class ListingForm
                             <label class="oy-check"><input type="radio" name="oy[audience]" value="everyone" <?php checked($currentAudience, 'everyone'); ?>><span><?php esc_html_e('Everyone — all verified partners receive this listing', 'openyacht'); ?></span></label>
                             <label class="oy-check"><input type="radio" name="oy[audience]" value="selected" <?php checked($currentAudience, 'selected'); ?>><span><?php esc_html_e('Selected partners only', 'openyacht'); ?></span></label>
                             <div class="ml-6 flex flex-col gap-1.5 transition-opacity" data-oy-audience-partners>
-                                <?php foreach (Services::partners()->all() as $partner) : ?>
-                                    <label class="oy-check"><input type="checkbox" name="oy[audience_partners][]" value="<?php echo (int) $partner->id; ?>" <?php checked(in_array($partner->id, $selectedIds, true)); ?>><span><?php echo esc_html($partner->domain); ?></span></label>
-                                <?php endforeach; ?>
+                                <?php $this->audienceSelection($selectedIds, $selectedGroupIds); ?>
                             </div>
                             <label class="oy-check"><input type="radio" name="oy[audience]" value="none" <?php checked($currentAudience, 'none'); ?>><span><?php esc_html_e('No one — displayed locally, never shared', 'openyacht'); ?></span></label>
                         </fieldset>
@@ -736,6 +737,77 @@ final class ListingForm
             <input type="text" class="oy-input" id="<?php echo esc_attr($id); ?>" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="<?php echo esc_attr($id); ?>_list" autocomplete="off" placeholder="<?php echo esc_attr($placeholder); ?>" data-oy-combobox-input>
             <ul class="oy-combobox-list" id="<?php echo esc_attr($id); ?>_list" role="listbox" aria-label="<?php echo esc_attr($listLabel); ?>" data-empty-text="<?php esc_attr_e('No matches', 'openyacht'); ?>" hidden></ul>
             <script type="application/json" data-oy-combobox-options><?php echo wp_json_encode($options, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG); ?></script>
+        </div>
+        <?php
+    }
+
+    /**
+     * The selected-audience picker: group checkboxes first (groups are the
+     * shorthand — a listing selects "Offices", not five domains), then
+     * individual partners — plain checkboxes while the partner list is
+     * short, a typeahead picker with removable rows once it outgrows one
+     * screenful.
+     *
+     * @param list<int> $selectedIds
+     * @param list<int> $selectedGroupIds
+     */
+    private function audienceSelection(array $selectedIds, array $selectedGroupIds): void
+    {
+        $groups = Services::partnerGroups()->all();
+        $partners = Services::partners()->all();
+
+        if ($groups !== []) {
+            ?>
+            <span class="oy-label !mb-0"><?php esc_html_e('Groups', 'openyacht'); ?></span>
+            <?php foreach ($groups as $group) : ?>
+                <label class="oy-check"><input type="checkbox" name="oy[audience_groups][]" value="<?php echo (int) $group->id; ?>" <?php checked(in_array($group->id, $selectedGroupIds, true)); ?>><span><?php echo esc_html($group->name); ?></span></label>
+            <?php endforeach; ?>
+            <span class="oy-label !mb-0 mt-2"><?php esc_html_e('Individual partners', 'openyacht'); ?></span>
+            <?php
+        }
+
+        if (count($partners) <= 10) {
+            foreach ($partners as $partner) {
+                ?>
+                <label class="oy-check"><input type="checkbox" name="oy[audience_partners][]" value="<?php echo (int) $partner->id; ?>" <?php checked(in_array($partner->id, $selectedIds, true)); ?>><span><?php echo esc_html($partner->domain); ?></span></label>
+                <?php
+            }
+
+            return;
+        }
+
+        // Typeahead path: search to add, rows to review and remove.
+        $byId = [];
+
+        foreach ($partners as $partner) {
+            $byId[$partner->id] = $partner->domain;
+        }
+
+        ?>
+        <div class="flex flex-col gap-1.5" data-oy-partner-picked>
+            <?php foreach ($selectedIds as $partnerId) : ?>
+                <?php if (isset($byId[$partnerId])) : ?>
+                    <span class="flex items-center gap-2" data-oy-partner-row>
+                        <input type="hidden" name="oy[audience_partners][]" value="<?php echo (int) $partnerId; ?>">
+                        <span class="oy-media-name !flex-none"><?php echo esc_html($byId[$partnerId]); ?></span>
+                        <button type="button" class="oy-row-x !w-6 !h-6" data-oy-partner-remove aria-label="<?php esc_attr_e('Remove partner', 'openyacht'); ?>">&times;</button>
+                    </span>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </div>
+        <div class="oy-combobox max-w-xs" data-oy-combobox data-oy-partner-picker>
+            <input type="hidden" value="">
+            <input type="text" class="oy-input" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="oy_partner_picker_list" autocomplete="off" placeholder="<?php esc_attr_e('Add a partner…', 'openyacht'); ?>" aria-label="<?php esc_attr_e('Search partners to add', 'openyacht'); ?>" data-oy-combobox-input>
+            <ul class="oy-combobox-list" id="oy_partner_picker_list" role="listbox" aria-label="<?php esc_attr_e('Partners', 'openyacht'); ?>" data-empty-text="<?php esc_attr_e('No matching partner', 'openyacht'); ?>" hidden></ul>
+            <script type="application/json" data-oy-combobox-options><?php
+                $options = [];
+
+        foreach ($partners as $partner) {
+            $options[] = ['value' => (string) $partner->id, 'label' => $partner->domain, 'hint' => ''];
+        }
+
+        echo wp_json_encode($options, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG);
+        ?></script>
         </div>
         <?php
     }

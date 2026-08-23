@@ -65,9 +65,18 @@ final class WpdbListingRepository implements ListingRepository
         $schema = new Schema($this->wpdb);
         $events = $schema->tableName('visibility_events');
         $audience = $schema->tableName('listing_audience');
+        $audienceGroups = $schema->tableName('listing_audience_groups');
+        $groupMembers = $schema->tableName('partner_group_members');
 
+        // A selected audience is the union of individually selected
+        // partners and members of selected groups — this must mirror
+        // SharingService::isVisibleTo() exactly.
         $visible = $this->wpdb->prepare(
-            "(l.audience = 'everyone' OR (l.audience = 'selected' AND EXISTS (SELECT 1 FROM {$audience} a WHERE a.listing_id = l.id AND a.partner_id = %d)))",
+            "(l.audience = 'everyone' OR (l.audience = 'selected' AND ("
+            . "EXISTS (SELECT 1 FROM {$audience} a WHERE a.listing_id = l.id AND a.partner_id = %d)"
+            . " OR EXISTS (SELECT 1 FROM {$audienceGroups} ag INNER JOIN {$groupMembers} gm ON gm.group_id = ag.group_id WHERE ag.listing_id = l.id AND gm.partner_id = %d)"
+            . ')))',
+            $partnerId,
             $partnerId,
         );
         $effective = "GREATEST(COALESCE(l.federation_updated_at, l.created_at), COALESCE(ev.occurred_at, '1000-01-01 00:00:00'))";

@@ -35,12 +35,14 @@ final class ListingsEndpointTest extends TestCase
         Functions\when('get_option')->justReturn([]);
         $audience = new \OpenYacht\Tests\Support\InMemoryAudienceRepository();
         $events = new \OpenYacht\Tests\Support\InMemoryVisibilityEventRepository();
-        $this->listings = new InMemoryListingRepository($audience, $events);
+        $groups = new \OpenYacht\Tests\Support\InMemoryPartnerGroupRepository();
+        $this->listings = new InMemoryListingRepository($audience, $events, $groups);
         $partners = new \OpenYacht\Tests\Support\InMemoryPartnerRepository();
         $sharing = new \OpenYacht\Federation\SharingService(
             $this->listings,
             $partners,
             $audience,
+            $groups,
             $events,
             new \OpenYacht\Tests\Support\CollectingLogger(),
         );

@@ -18,6 +18,7 @@ final class InMemoryListingRepository implements ListingRepository
     public function __construct(
         public ?InMemoryAudienceRepository $audience = null,
         public ?InMemoryVisibilityEventRepository $events = null,
+        public ?InMemoryPartnerGroupRepository $groups = null,
     ) {
     }
 
@@ -70,7 +71,11 @@ final class InMemoryListingRepository implements ListingRepository
             $visible = match ($listing->audience) {
                 \OpenYacht\Federation\Audience::Everyone => true,
                 \OpenYacht\Federation\Audience::None => false,
-                \OpenYacht\Federation\Audience::Selected => in_array($partnerId, $this->audience?->partnersForListing($listing->id) ?? [], true),
+                \OpenYacht\Federation\Audience::Selected => in_array($partnerId, $this->audience?->partnersForListing($listing->id) ?? [], true)
+                    || array_intersect(
+                        $this->groups?->groupIdsForListing($listing->id) ?? [],
+                        $this->groups?->groupIdsForPartner($partnerId) ?? [],
+                    ) !== [],
             };
             $event = $latest[$listing->id] ?? null;
             $effective = max((string) $listing->federationUpdatedAt, $event['occurred_at'] ?? '');

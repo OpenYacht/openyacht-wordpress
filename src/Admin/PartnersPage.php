@@ -90,6 +90,44 @@ final class PartnersPage
                     Services::sharingService()->refreshPartnerFeed($partner->id, "grants changed for {$partner->domain}");
                     $notice = 'grants';
                     break;
+                case 'group_create':
+                    $name = isset($_POST['group_name']) ? trim(sanitize_text_field(wp_unslash($_POST['group_name']))) : '';
+
+                    if ($name !== '') {
+                        Services::partnerGroups()->create($name);
+                        Services::logger()->log('partner', "Partner group \"{$name}\" created", 'group_created');
+                        $notice = 'group_saved';
+                    }
+                    break;
+                case 'group_save':
+                    $groupId = isset($_POST['group_id']) ? (int) $_POST['group_id'] : 0;
+                    $group = Services::partnerGroups()->find($groupId);
+
+                    if ($group === null) {
+                        break;
+                    }
+
+                    if (! empty($_POST['delete_group'])) {
+                        Services::sharingService()->deleteGroup($group->id);
+                        $notice = 'group_deleted';
+                        break;
+                    }
+
+                    $name = isset($_POST['group_name']) ? trim(sanitize_text_field(wp_unslash($_POST['group_name']))) : '';
+
+                    if ($name !== '' && $name !== $group->name) {
+                        Services::partnerGroups()->rename($group->id, $name);
+                    }
+
+                    $memberIds = array_map('intval', isset($_POST['members']) && is_array($_POST['members']) ? $_POST['members'] : []);
+                    // Membership changes replay through the visibility-event
+                    // log: joined partners pick up every listing selecting
+                    // this group on their next poll, removed partners get
+                    // tombstones — no listing is touched.
+                    $result = Services::sharingService()->replaceGroupMembers($group->id, $memberIds);
+                    Services::logger()->log('partner', "Partner group \"{$group->name}\" saved: {$result['revealed']} pair(s) gain visibility, {$result['hidden']} lose it", 'group_saved');
+                    $notice = 'group_saved';
+                    break;
                 case 'approve':
                 case 'block':
                 case 'refresh':
@@ -143,6 +181,8 @@ final class PartnersPage
             'blocked' => __('Partner blocked. All its requests will be rejected.', 'openyacht'),
             'refreshed' => __('Partner keys refreshed.', 'openyacht'),
             'grants' => __('Sharing rules saved. They apply to every payload this partner receives from now on.', 'openyacht'),
+            'group_saved' => __('Group saved. Joined partners pick up its listings on their next poll; removed partners receive tombstones.', 'openyacht'),
+            'group_deleted' => __('Group deleted. Listings that shared only through it were tombstoned for its members.', 'openyacht'),
         ];
 
         if (isset($messages[$notice])) {
@@ -172,7 +212,58 @@ final class PartnersPage
         $table->prepare_items();
         $table->display();
         $this->renderAddForm();
+        $this->renderGroups();
         echo '</div>';
+    }
+
+    /**
+     * Node-defined partner groups (company sites, offices, third parties,
+     * …): audience shorthand for the listing editor. Membership changes
+     * replay through the visibility-event log immediately.
+     */
+    private function renderGroups(): void
+    {
+        $groups = Services::partnerGroups();
+        $partners = Services::partners()->all();
+
+        echo '<hr style="margin:2em 0;">';
+        echo '<h2>' . esc_html__('Partner groups', 'openyacht') . '</h2>';
+        echo '<p class="description">' . esc_html__('Group partners however this brokerage thinks about them — company sites, offices, third parties. Listings can share with a group instead of picking partners one by one; adding a partner to a group immediately shares every listing that selects it, and removing one sends tombstones.', 'openyacht') . '</p>';
+
+        foreach ($groups->all() as $group) {
+            $members = $groups->members($group->id);
+
+            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin:12px 0;padding:12px;border:1px solid #c3c4c7;background:#fff;max-width:640px;">';
+            echo '<input type="hidden" name="action" value="' . esc_attr(self::ACTION) . '">';
+            echo '<input type="hidden" name="op" value="group_save">';
+            echo '<input type="hidden" name="group_id" value="' . (int) $group->id . '">';
+            wp_nonce_field(self::ACTION);
+            echo '<p><input type="text" name="group_name" value="' . esc_attr($group->name) . '" class="regular-text" aria-label="' . esc_attr__('Group name', 'openyacht') . '"> <span class="description">' . esc_html(sprintf(_n('%d member', '%d members', count($members), 'openyacht'), count($members))) . '</span></p>';
+            echo '<fieldset style="display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0;">';
+            echo '<legend class="screen-reader-text">' . esc_html__('Members', 'openyacht') . '</legend>';
+
+            foreach ($partners as $partner) {
+                printf(
+                    '<label style="min-width:220px;"><input type="checkbox" name="members[]" value="%d" %s> %s</label>',
+                    $partner->id,
+                    checked(in_array($partner->id, $members, true), true, false),
+                    esc_html($partner->domain),
+                );
+            }
+
+            echo '</fieldset>';
+            submit_button(__('Save group', 'openyacht'), 'secondary', '', false);
+            echo ' <button type="submit" class="button-link-delete" name="delete_group" value="1" onclick="return confirm(' . esc_attr(wp_json_encode(__('Delete this group? Listings sharing only through it will be tombstoned for its members.', 'openyacht'))) . ');">' . esc_html__('Delete group', 'openyacht') . '</button>';
+            echo '</form>';
+        }
+
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin-top:12px;display:flex;gap:8px;align-items:center;">';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::ACTION) . '">';
+        echo '<input type="hidden" name="op" value="group_create">';
+        wp_nonce_field(self::ACTION);
+        echo '<input type="text" name="group_name" class="regular-text" placeholder="' . esc_attr__('New group name — e.g. Company sites', 'openyacht') . '" aria-label="' . esc_attr__('New group name', 'openyacht') . '">';
+        submit_button(__('Add group', 'openyacht'), 'secondary', '', false);
+        echo '</form>';
     }
 
     /**

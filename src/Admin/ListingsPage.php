@@ -239,7 +239,8 @@ final class ListingsPage
             isset($input['audience']) ? sanitize_key((string) $input['audience']) : 'everyone',
         ) ?? \OpenYacht\Federation\Audience::Everyone;
         $selectedPartners = array_map('intval', (array) ($input['audience_partners'] ?? []));
-        Services::sharingService()->setAudience($result, $audience, $selectedPartners);
+        $selectedGroups = array_map('intval', (array) ($input['audience_groups'] ?? []));
+        Services::sharingService()->setAudience($result, $audience, $selectedPartners, $selectedGroups);
 
         $this->redirect(['openyacht_notice' => $id > 0 ? 'saved' : 'created']);
     }

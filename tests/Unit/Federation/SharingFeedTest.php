@@ -17,6 +17,7 @@ use OpenYacht\Tests\Support\CollectingLogger;
 use OpenYacht\Tests\Support\InMemoryAudienceRepository;
 use OpenYacht\Tests\Support\InMemoryListingMediaRepository;
 use OpenYacht\Tests\Support\InMemoryListingRepository;
+use OpenYacht\Tests\Support\InMemoryPartnerGroupRepository;
 use OpenYacht\Tests\Support\InMemoryPartnerRepository;
 use OpenYacht\Tests\Support\InMemoryPriceHistoryRepository;
 use OpenYacht\Tests\Support\InMemoryVisibilityEventRepository;
@@ -38,6 +39,8 @@ final class SharingFeedTest extends TestCase
 
     private InMemoryVisibilityEventRepository $events;
 
+    private InMemoryPartnerGroupRepository $groups;
+
     private SharingService $sharing;
 
     private ListingsEndpoint $endpoint;
@@ -56,9 +59,10 @@ final class SharingFeedTest extends TestCase
 
         $audience = new InMemoryAudienceRepository();
         $this->events = new InMemoryVisibilityEventRepository();
-        $this->listings = new InMemoryListingRepository($audience, $this->events);
+        $this->groups = new InMemoryPartnerGroupRepository();
+        $this->listings = new InMemoryListingRepository($audience, $this->events, $this->groups);
         $this->partners = new InMemoryPartnerRepository();
-        $this->sharing = new SharingService($this->listings, $this->partners, $audience, $this->events, new CollectingLogger());
+        $this->sharing = new SharingService($this->listings, $this->partners, $audience, $this->groups, $this->events, new CollectingLogger());
         $this->endpoint = new ListingsEndpoint(
             $this->listings,
             new ListingSerializer(new InMemoryPriceHistoryRepository(), new InMemoryListingMediaRepository()),
@@ -210,5 +214,77 @@ final class SharingFeedTest extends TestCase
 
         self::assertSame(['hidden' => 0, 'revealed' => 0], $result, 'everyone -> selected-with-all changes nothing');
         self::assertCount(0, $this->events->events);
+    }
+
+    public function testSelectingAGroupSharesWithItsMembersOnly(): void
+    {
+        $offices = $this->groups->create('Offices');
+        $this->groups->replaceMembers($offices->id, [$this->partnerA->id]);
+
+        $listing = $this->seedListing('GROUP SHARE');
+        $this->sharing->setAudience($listing, Audience::Selected, [], [$offices->id]);
+
+        self::assertCount(1, $this->feed($this->partnerA), 'group member receives the listing');
+        self::assertCount(0, $this->feed($this->partnerB), 'non-member does not');
+        self::assertTrue($this->sharing->isVisibleTo($this->listings->find($listing->id), $this->partnerA->id));
+    }
+
+    public function testAddingAPartnerToASelectedGroupSurfacesEveryListingSelectingIt(): void
+    {
+        $offices = $this->groups->create('Offices');
+        $this->groups->replaceMembers($offices->id, [$this->partnerA->id]);
+
+        $listing = $this->seedListing('GROUP JOIN', '2026-08-01 10:00:00');
+        $this->sharing->setAudience($listing, Audience::Selected, [], [$offices->id]);
+        $watermark = '2026-08-10T00:00:00Z'; // partner B's watermark, after all content changes
+
+        $result = $this->sharing->replaceGroupMembers($offices->id, [$this->partnerA->id, $this->partnerB->id]);
+
+        self::assertSame(['hidden' => 0, 'revealed' => 1], $result);
+        $feedB = $this->feed($this->partnerB, $watermark);
+        self::assertCount(1, $feedB, 'the joined partner picks the listing up against its old watermark');
+        self::assertArrayNotHasKey('tombstone', $feedB[0]);
+    }
+
+    public function testRemovingAPartnerFromAGroupTombstonesUnlessStillVisibleAnotherWay(): void
+    {
+        $offices = $this->groups->create('Offices');
+        $this->groups->replaceMembers($offices->id, [$this->partnerA->id, $this->partnerB->id]);
+
+        $viaGroupOnly = $this->seedListing('VIA GROUP ONLY', '2026-08-01 10:00:00');
+        $this->sharing->setAudience($viaGroupOnly, Audience::Selected, [], [$offices->id]);
+
+        $alsoIndividual = $this->seedListing('ALSO INDIVIDUAL', '2026-08-01 10:00:00');
+        $this->sharing->setAudience($alsoIndividual, Audience::Selected, [$this->partnerB->id], [$offices->id]);
+
+        $watermark = '2026-08-10T00:00:00Z';
+        $result = $this->sharing->replaceGroupMembers($offices->id, [$this->partnerA->id]);
+
+        self::assertSame(['hidden' => 1, 'revealed' => 0], $result, 'only the group-only listing transitions');
+
+        $feedB = $this->feed($this->partnerB, $watermark);
+        self::assertCount(1, $feedB);
+        self::assertTrue($feedB[0]['tombstone'], 'group-only listing tombstones for the removed partner');
+
+        self::assertCount(1, $this->feed($this->partnerB), 'cold sync still serves the individually shared listing');
+        self::assertCount(0, $this->feed($this->partnerA, $watermark), 'the remaining member sees no churn');
+    }
+
+    public function testDeletingAGroupTombstonesItsListingsForFormerMembers(): void
+    {
+        $offices = $this->groups->create('Offices');
+        $this->groups->replaceMembers($offices->id, [$this->partnerA->id]);
+
+        $listing = $this->seedListing('GROUP DELETE', '2026-08-01 10:00:00');
+        $this->sharing->setAudience($listing, Audience::Selected, [], [$offices->id]);
+        $watermark = '2026-08-10T00:00:00Z';
+
+        $this->sharing->deleteGroup($offices->id);
+
+        $feedA = $this->feed($this->partnerA, $watermark);
+        self::assertCount(1, $feedA);
+        self::assertTrue($feedA[0]['tombstone']);
+        self::assertNull($this->groups->find($offices->id));
+        self::assertSame([], $this->groups->groupIdsForListing($listing->id), 'the listing selection rows are gone too');
     }
 }

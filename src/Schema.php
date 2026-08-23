@@ -13,7 +13,7 @@ namespace OpenYacht;
  */
 final class Schema
 {
-    public const VERSION = 4;
+    public const VERSION = 5;
 
     public const OPTION = 'openyacht_schema_version';
 
@@ -27,6 +27,9 @@ final class Schema
         'partners',
         'listings',
         'listing_audience',
+        'partner_groups',
+        'partner_group_members',
+        'listing_audience_groups',
         'listing_media',
         'price_history',
         'copies',
@@ -164,6 +167,34 @@ final class Schema
   PRIMARY KEY  (id),
   UNIQUE KEY listing_partner (listing_id,partner_id),
   KEY partner_id (partner_id)
+) {$collate};";
+
+        $tables['partner_groups'] = "CREATE TABLE {$this->tableName('partner_groups')} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  name varchar(190) NOT NULL,
+  created_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  UNIQUE KEY name (name)
+) {$collate};";
+
+        $tables['partner_group_members'] = "CREATE TABLE {$this->tableName('partner_group_members')} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  group_id bigint(20) unsigned NOT NULL,
+  partner_id bigint(20) unsigned NOT NULL,
+  created_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  UNIQUE KEY group_partner (group_id,partner_id),
+  KEY partner_id (partner_id)
+) {$collate};";
+
+        $tables['listing_audience_groups'] = "CREATE TABLE {$this->tableName('listing_audience_groups')} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  listing_id bigint(20) unsigned NOT NULL,
+  group_id bigint(20) unsigned NOT NULL,
+  created_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  UNIQUE KEY listing_group (listing_id,group_id),
+  KEY group_id (group_id)
 ) {$collate};";
 
         $tables['listing_media'] = "CREATE TABLE {$this->tableName('listing_media')} (

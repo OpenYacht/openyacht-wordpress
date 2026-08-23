@@ -526,8 +526,74 @@
 		});
 	}
 
+	/* ---------- audience partner typeahead ---------- */
+
+	/**
+	 * Once the partner list outgrows checkboxes, partners are added via a
+	 * typeahead: picking one appends a removable row with a hidden input
+	 * and resets the picker for the next search.
+	 */
+	function initPartnerPicker() {
+		var picker = document.querySelector('[data-oy-partner-picker]');
+		var picked = document.querySelector('[data-oy-partner-picked]');
+
+		if (!picker || !picked) {
+			return;
+		}
+
+		picker.addEventListener('oy:combobox-change', function (event) {
+			var option = event.detail;
+
+			if (!option || option.value === '') {
+				return;
+			}
+
+			var already = picked.querySelector('input[value="' + option.value + '"]');
+
+			if (!already) {
+				var row = document.createElement('span');
+				row.className = 'flex items-center gap-2';
+				row.setAttribute('data-oy-partner-row', '');
+
+				var hidden = document.createElement('input');
+				hidden.type = 'hidden';
+				hidden.name = 'oy[audience_partners][]';
+				hidden.value = option.value;
+				row.appendChild(hidden);
+
+				var label = document.createElement('span');
+				label.className = 'oy-media-name !flex-none';
+				label.textContent = option.label;
+				row.appendChild(label);
+
+				var remove = document.createElement('button');
+				remove.type = 'button';
+				remove.className = 'oy-row-x !w-6 !h-6';
+				remove.setAttribute('data-oy-partner-remove', '');
+				remove.setAttribute('aria-label', 'Remove partner');
+				remove.innerHTML = '&times;';
+				row.appendChild(remove);
+
+				picked.appendChild(row);
+			}
+
+			// Reset for the next search.
+			picker.querySelector('input[type="hidden"]').value = '';
+			var input = picker.querySelector('[data-oy-combobox-input]');
+			input.value = '';
+			input.focus();
+		});
+
+		picked.addEventListener('click', function (event) {
+			if (event.target.closest('[data-oy-partner-remove]')) {
+				event.target.closest('[data-oy-partner-row]').remove();
+			}
+		});
+	}
+
 	document.addEventListener('DOMContentLoaded', function () {
 		document.querySelectorAll('[data-oy-combobox]').forEach(initCombobox);
+		initPartnerPicker();
 		initRail();
 		initAudience();
 		initUnlistedBuilder();

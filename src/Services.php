@@ -19,6 +19,7 @@ use OpenYacht\Federation\ListingSerializer;
 use OpenYacht\Federation\ListingService;
 use OpenYacht\Federation\ListingValidator;
 use OpenYacht\Federation\Logger;
+use OpenYacht\Federation\PartnerGroupRepository;
 use OpenYacht\Federation\PartnerRepository;
 use OpenYacht\Federation\PartnerService;
 use OpenYacht\Federation\PriceHistoryRepository;
@@ -38,6 +39,7 @@ use OpenYacht\Federation\WpdbKeyRepository;
 use OpenYacht\Federation\WpdbListingMediaRepository;
 use OpenYacht\Federation\WpdbListingRepository;
 use OpenYacht\Federation\WpdbLogger;
+use OpenYacht\Federation\WpdbPartnerGroupRepository;
 use OpenYacht\Federation\WpdbPartnerRepository;
 use OpenYacht\Federation\WpdbPriceHistoryRepository;
 use OpenYacht\Federation\WpdbVisibilityEventRepository;
@@ -146,12 +148,18 @@ final class Services
         return self::$cache[__FUNCTION__] ??= new WpdbVisibilityEventRepository(self::wpdb());
     }
 
+    public static function partnerGroups(): PartnerGroupRepository
+    {
+        return self::$cache[__FUNCTION__] ??= new WpdbPartnerGroupRepository(self::wpdb());
+    }
+
     public static function sharingService(): SharingService
     {
         return self::$cache[__FUNCTION__] ??= new SharingService(
             self::listings(),
             self::partners(),
             self::audience(),
+            self::partnerGroups(),
             self::visibilityEvents(),
             self::logger(),
         );
