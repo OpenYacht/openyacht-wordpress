@@ -60,15 +60,31 @@ final class WpdbListingRepository implements ListingRepository
         );
     }
 
-    public function page(?string $updatedSinceStored, ?array $cursor, int $limit): array
+    public function feedPage(int $partnerId, ?string $updatedSinceStored, ?array $cursor, int $limit): array
     {
-        $where = [$this->wpdb->prepare('status != %s', ListingStatus::Draft->value)];
+        $schema = new Schema($this->wpdb);
+        $events = $schema->tableName('visibility_events');
+        $audience = $schema->tableName('listing_audience');
+
+        $visible = $this->wpdb->prepare(
+            "(l.audience = 'everyone' OR (l.audience = 'selected' AND EXISTS (SELECT 1 FROM {$audience} a WHERE a.listing_id = l.id AND a.partner_id = %d)))",
+            $partnerId,
+        );
+        $effective = "GREATEST(COALESCE(l.federation_updated_at, l.created_at), COALESCE(ev.occurred_at, '1000-01-01 00:00:00'))";
+
+        $where = [$this->wpdb->prepare('l.status != %s', ListingStatus::Draft->value)];
 
         if ($updatedSinceStored !== null) {
-            $where[] = $this->wpdb->prepare('federation_updated_at >= %s', $updatedSinceStored);
-        } else {
             $where[] = $this->wpdb->prepare(
-                'status IN (%s, %s)',
+                "(({$visible} AND {$effective} >= %s) OR (NOT {$visible} AND ev.event = %s AND ev.occurred_at >= %s))",
+                $updatedSinceStored,
+                'hidden',
+                $updatedSinceStored,
+            );
+        } else {
+            $where[] = $visible;
+            $where[] = $this->wpdb->prepare(
+                'l.status IN (%s, %s)',
                 ListingStatus::Active->value,
                 ListingStatus::UnderOffer->value,
             );
@@ -76,20 +92,40 @@ final class WpdbListingRepository implements ListingRepository
 
         if ($cursor !== null) {
             $where[] = $this->wpdb->prepare(
-                '(federation_updated_at > %s OR (federation_updated_at = %s AND id > %d))',
+                "({$effective} > %s OR ({$effective} = %s AND l.id > %d))",
                 $cursor['updated_at'],
                 $cursor['updated_at'],
                 $cursor['id'],
             );
         }
 
-        $sql = "SELECT * FROM {$this->table()} WHERE " . implode(' AND ', $where)
-            . ' ORDER BY federation_updated_at, id'
+        $sql = "SELECT l.*, ev.event AS last_event, {$visible} AS visible_now, {$effective} AS effective_updated_at
+            FROM {$this->table()} l
+            LEFT JOIN (
+                SELECT e.listing_id, e.event, e.occurred_at
+                FROM {$events} e
+                JOIN (" . $this->wpdb->prepare(
+            "SELECT listing_id, MAX(id) AS max_id FROM {$events} WHERE partner_id = %d GROUP BY listing_id",
+            $partnerId,
+        ) . ') latest ON latest.max_id = e.id
+            ) ev ON ev.listing_id = l.id
+            WHERE ' . implode(' AND ', $where)
+            . " ORDER BY {$effective}, l.id"
             . $this->wpdb->prepare(' LIMIT %d', $limit + 1);
 
         $rows = $this->wpdb->get_results($sql, 'ARRAY_A');
+        $items = [];
 
-        return array_map($this->hydrate(...), is_array($rows) ? $rows : []);
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            $items[] = new FeedItem(
+                listing: $this->hydrate($row),
+                visible: (bool) $row['visible_now'],
+                effectiveUpdatedAt: (string) $row['effective_updated_at'],
+                lastEvent: isset($row['last_event']) && $row['last_event'] !== '' ? (string) $row['last_event'] : null,
+            );
+        }
+
+        return $items;
     }
 
     public function countAll(): int
@@ -120,6 +156,10 @@ final class WpdbListingRepository implements ListingRepository
 
         if (array_key_exists('status', $columns) && $columns['status'] instanceof ListingStatus) {
             $columns['status'] = $columns['status']->value;
+        }
+
+        if (array_key_exists('audience', $columns) && $columns['audience'] instanceof Audience) {
+            $columns['audience'] = $columns['audience']->value;
         }
 
         return $columns;
@@ -173,6 +213,7 @@ final class WpdbListingRepository implements ListingRepository
             compliance: $json($row['compliance'] ?? null),
             listedAt: $string($row['listed_at'] ?? null),
             federationUpdatedAt: $string($row['federation_updated_at'] ?? null),
+            audience: Audience::tryFrom((string) ($row['audience'] ?? '')) ?? Audience::Everyone,
         );
     }
 

@@ -33,12 +33,23 @@ final class ListingsEndpointTest extends TestCase
         Functions\when('home_url')->justReturn('https://node.test/');
         Functions\when('get_bloginfo')->justReturn('Test Node');
         Functions\when('get_option')->justReturn([]);
-        $this->listings = new InMemoryListingRepository();
+        $audience = new \OpenYacht\Tests\Support\InMemoryAudienceRepository();
+        $events = new \OpenYacht\Tests\Support\InMemoryVisibilityEventRepository();
+        $this->listings = new InMemoryListingRepository($audience, $events);
+        $partners = new \OpenYacht\Tests\Support\InMemoryPartnerRepository();
+        $sharing = new \OpenYacht\Federation\SharingService(
+            $this->listings,
+            $partners,
+            $audience,
+            $events,
+            new \OpenYacht\Tests\Support\CollectingLogger(),
+        );
         $this->endpoint = new ListingsEndpoint(
             $this->listings,
             new ListingSerializer(new InMemoryPriceHistoryRepository(), new InMemoryListingMediaRepository()),
+            $sharing,
         );
-        $this->partner = new Partner(1, 'partner.example', null, null, null, null, TrustLevel::Verified, null, null, null, 0, null, null);
+        $this->partner = $partners->insert(['domain' => 'partner.example', 'trust_level' => TrustLevel::Verified]);
     }
 
     private function seed(string $name, ListingStatus $status, string $updatedAt): void

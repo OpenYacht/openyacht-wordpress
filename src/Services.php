@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OpenYacht;
 
+use OpenYacht\Federation\AudienceRepository;
 use OpenYacht\Federation\BuilderRegistry;
 use OpenYacht\Federation\CategoryVocabulary;
 use OpenYacht\Federation\CopyMediaRepository;
@@ -22,12 +23,15 @@ use OpenYacht\Federation\PartnerRepository;
 use OpenYacht\Federation\PartnerService;
 use OpenYacht\Federation\PriceHistoryRepository;
 use OpenYacht\Federation\RichTextSanitizer;
+use OpenYacht\Federation\SharingService;
 use OpenYacht\Federation\SignedClient;
 use OpenYacht\Federation\Signer;
 use OpenYacht\Federation\SyncService;
 use OpenYacht\Federation\Verifier;
+use OpenYacht\Federation\VisibilityEventRepository;
 use OpenYacht\Federation\WellKnownClient;
 use OpenYacht\Federation\WellKnownDocument;
+use OpenYacht\Federation\WpdbAudienceRepository;
 use OpenYacht\Federation\WpdbCopyMediaRepository;
 use OpenYacht\Federation\WpdbCopyRepository;
 use OpenYacht\Federation\WpdbKeyRepository;
@@ -36,6 +40,7 @@ use OpenYacht\Federation\WpdbListingRepository;
 use OpenYacht\Federation\WpdbLogger;
 use OpenYacht\Federation\WpdbPartnerRepository;
 use OpenYacht\Federation\WpdbPriceHistoryRepository;
+use OpenYacht\Federation\WpdbVisibilityEventRepository;
 use OpenYacht\Media\ImageFetcher;
 use OpenYacht\Media\MediaService;
 use OpenYacht\Media\Storage;
@@ -127,6 +132,28 @@ final class Services
         return self::$cache[__FUNCTION__] ??= new \OpenYacht\Http\ListingsEndpoint(
             self::listings(),
             self::listingSerializer(),
+            self::sharingService(),
+        );
+    }
+
+    public static function audience(): AudienceRepository
+    {
+        return self::$cache[__FUNCTION__] ??= new WpdbAudienceRepository(self::wpdb());
+    }
+
+    public static function visibilityEvents(): VisibilityEventRepository
+    {
+        return self::$cache[__FUNCTION__] ??= new WpdbVisibilityEventRepository(self::wpdb());
+    }
+
+    public static function sharingService(): SharingService
+    {
+        return self::$cache[__FUNCTION__] ??= new SharingService(
+            self::listings(),
+            self::partners(),
+            self::audience(),
+            self::visibilityEvents(),
+            self::logger(),
         );
     }
 

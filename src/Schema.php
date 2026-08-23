@@ -13,7 +13,7 @@ namespace OpenYacht;
  */
 final class Schema
 {
-    public const VERSION = 2;
+    public const VERSION = 3;
 
     public const OPTION = 'openyacht_schema_version';
 
@@ -26,6 +26,7 @@ final class Schema
         'keys',
         'partners',
         'listings',
+        'listing_audience',
         'listing_media',
         'price_history',
         'copies',
@@ -144,6 +145,7 @@ final class Schema
   descriptions longtext NULL,
   features longtext NULL,
   compliance longtext NULL,
+  audience varchar(16) NOT NULL DEFAULT 'everyone',
   listed_at datetime NULL,
   federation_updated_at datetime NULL,
   created_at datetime NOT NULL,
@@ -152,6 +154,16 @@ final class Schema
   UNIQUE KEY uuid (uuid),
   KEY status (status),
   KEY federation_updated_at (federation_updated_at)
+) {$collate};";
+
+        $tables['listing_audience'] = "CREATE TABLE {$this->tableName('listing_audience')} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  listing_id bigint(20) unsigned NOT NULL,
+  partner_id bigint(20) unsigned NOT NULL,
+  created_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  UNIQUE KEY listing_partner (listing_id,partner_id),
+  KEY partner_id (partner_id)
 ) {$collate};";
 
         $tables['listing_media'] = "CREATE TABLE {$this->tableName('listing_media')} (

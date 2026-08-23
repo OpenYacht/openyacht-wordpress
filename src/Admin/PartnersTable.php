@@ -63,6 +63,11 @@ final class PartnersTable extends \WP_List_Table
         }
 
         $actions['refresh'] = $this->actionButton($item, 'refresh', __('Refresh keys', 'openyacht'));
+        $grantsUrl = add_query_arg(
+            ['page' => PartnersPage::MENU_SLUG, 'action' => 'grants', 'domain' => $item->domain],
+            admin_url('admin.php'),
+        );
+        $actions['grants'] = '<a href="' . esc_url($grantsUrl) . '">' . esc_html__('Sharing', 'openyacht') . '</a>';
 
         $pinned = $item->pinnedKeyId !== null
             ? '<br><span class="description">' . esc_html(sprintf(__('Pinned key: %s', 'openyacht'), $item->pinnedKeyId)) . '</span>'

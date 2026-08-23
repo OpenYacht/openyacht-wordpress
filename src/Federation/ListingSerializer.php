@@ -74,16 +74,18 @@ final class ListingSerializer
     /**
      * The tombstone form: served in updated_since results for every
      * listing that became invisible to the requesting partner (API-3).
+     * An unshared listing tombstones as withdrawn at the transition time —
+     * indistinguishable from a real withdrawal (no information leak).
      *
      * @return array<string, mixed>
      */
-    public function tombstone(Listing $listing): array
+    public function tombstone(Listing $listing, ?string $statusOverride = null, ?string $updatedAtOverrideStored = null): array
     {
         return [
             'id' => $listing->canonicalUri(),
             'tombstone' => true,
-            'status' => $listing->status->value,
-            'updated_at' => self::rfc3339($listing->federationUpdatedAt),
+            'status' => $statusOverride ?? $listing->status->value,
+            'updated_at' => self::rfc3339($updatedAtOverrideStored ?? $listing->federationUpdatedAt),
         ];
     }
 

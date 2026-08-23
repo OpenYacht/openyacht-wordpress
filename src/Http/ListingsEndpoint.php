@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace OpenYacht\Http;
 
 use OpenYacht\Federation\ErrorCode;
-use OpenYacht\Federation\Listing;
+use OpenYacht\Federation\FeedItem;
 use OpenYacht\Federation\ListingCursor;
 use OpenYacht\Federation\ListingRepository;
 use OpenYacht\Federation\ListingSerializer;
 use OpenYacht\Federation\ListingStatus;
 use OpenYacht\Federation\NodeConfig;
 use OpenYacht\Federation\Partner;
+use OpenYacht\Federation\SharingService;
 
 /**
  * Serves this node's own listings to verified partners. Copies of other
@@ -32,6 +33,7 @@ final class ListingsEndpoint
     public function __construct(
         private readonly ListingRepository $listings,
         private readonly ListingSerializer $serializer,
+        private readonly SharingService $sharing,
     ) {
     }
 
@@ -55,7 +57,7 @@ final class ListingsEndpoint
         }
 
         $cursor = ListingCursor::decode(isset($query['cursor']) ? (string) $query['cursor'] : null);
-        $rows = $this->listings->page($updatedSinceStored, $cursor, $pageSize);
+        $rows = $this->listings->feedPage($partner->id, $updatedSinceStored, $cursor, $pageSize);
         $hasMore = count($rows) > $pageSize;
         $page = array_slice($rows, 0, $pageSize);
 
@@ -67,17 +69,29 @@ final class ListingsEndpoint
         if ($hasMore && $page !== []) {
             $last = end($page);
             $meta['next_cursor'] = ListingCursor::encode([
-                'updated_at' => $this->rfc3339((string) $last->federationUpdatedAt),
-                'id' => $last->id,
+                'updated_at' => $this->rfc3339($last->effectiveUpdatedAt),
+                'id' => $last->listing->id,
             ]);
         }
 
         return [
             'payload' => [
                 'data' => array_map(
-                    fn (Listing $listing): array => $listing->isTerminal()
-                        ? $this->serializer->tombstone($listing)
-                        : $this->serializer->serialize($listing, $partner),
+                    function (FeedItem $item) use ($partner): array {
+                        if (! $item->visible) {
+                            // Unshared: a tombstone indistinguishable from a
+                            // real withdrawal, timestamped at the transition.
+                            return $this->serializer->tombstone(
+                                $item->listing,
+                                $item->listing->isTerminal() ? null : ListingStatus::Withdrawn->value,
+                                $item->effectiveUpdatedAt,
+                            );
+                        }
+
+                        return $item->listing->isTerminal()
+                            ? $this->serializer->tombstone($item->listing)
+                            : $this->serializer->serialize($item->listing, $partner);
+                    },
                     $page,
                 ),
                 'meta' => $meta,
@@ -96,8 +110,12 @@ final class ListingsEndpoint
     {
         $listing = $this->listings->findByUuid($uuid);
 
-        // Drafts are never distributed — and never revealed (LS-7).
-        if ($listing === null || $listing->status === ListingStatus::Draft) {
+        // Drafts are never distributed — and never revealed (LS-7). A
+        // listing not shared with this partner is equally NOT_FOUND: the
+        // same response as for a listing that does not exist (no leak).
+        if ($listing === null
+            || $listing->status === ListingStatus::Draft
+            || ! $this->sharing->isVisibleTo($listing, $partner->id)) {
             return ['error' => ErrorCode::NotFound, 'message' => 'No such listing.'];
         }
 

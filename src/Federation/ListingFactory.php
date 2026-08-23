@@ -57,6 +57,9 @@ final class ListingFactory
             compliance: is_array($columns['compliance'] ?? null) ? $columns['compliance'] : [],
             listedAt: $string($columns['listed_at'] ?? null),
             federationUpdatedAt: $string($columns['federation_updated_at'] ?? null),
+            audience: ($columns['audience'] ?? null) instanceof Audience
+                ? $columns['audience']
+                : (Audience::tryFrom((string) ($columns['audience'] ?? '')) ?? Audience::Everyone),
         );
     }
 
@@ -99,6 +102,7 @@ final class ListingFactory
             'compliance' => $listing->compliance,
             'listed_at' => $listing->listedAt,
             'federation_updated_at' => $listing->federationUpdatedAt,
+            'audience' => $listing->audience,
         ];
     }
 

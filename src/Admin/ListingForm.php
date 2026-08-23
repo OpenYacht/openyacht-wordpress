@@ -267,6 +267,34 @@ final class ListingForm
                 </tr>
             </table>
 
+            <h2><?php esc_html_e('Sharing', 'openyacht'); ?></h2>
+            <table class="form-table" role="presentation">
+                <tr>
+                    <th scope="row"><?php esc_html_e('Audience', 'openyacht'); ?></th>
+                    <td>
+                        <?php
+                        $currentAudience = $oldInput !== null
+                            ? (string) ($oldInput['audience'] ?? 'everyone')
+                            : ($listing?->audience->value ?? 'everyone');
+        $selectedIds = $oldInput !== null
+            ? array_map('intval', (array) ($oldInput['audience_partners'] ?? []))
+            : ($listing !== null ? Services::audience()->partnersForListing($listing->id) : []);
+        ?>
+                        <fieldset>
+                            <label><input type="radio" name="oy[audience]" value="everyone" <?php checked($currentAudience, 'everyone'); ?>> <?php esc_html_e('Everyone — all verified partners receive this listing', 'openyacht'); ?></label><br>
+                            <label><input type="radio" name="oy[audience]" value="selected" <?php checked($currentAudience, 'selected'); ?>> <?php esc_html_e('Selected partners only:', 'openyacht'); ?></label>
+                            <div style="margin:4px 0 4px 24px;">
+                                <?php foreach (Services::partners()->all() as $partner) : ?>
+                                    <label style="display:block;"><input type="checkbox" name="oy[audience_partners][]" value="<?php echo (int) $partner->id; ?>" <?php checked(in_array($partner->id, $selectedIds, true)); ?>> <?php echo esc_html($partner->domain); ?></label>
+                                <?php endforeach; ?>
+                            </div>
+                            <label><input type="radio" name="oy[audience]" value="none" <?php checked($currentAudience, 'none'); ?>> <?php esc_html_e('No one — displayed locally, never shared', 'openyacht'); ?></label>
+                        </fieldset>
+                        <p class="description"><?php esc_html_e('Unsharing sends affected partners a tombstone indistinguishable from a withdrawal; re-sharing surfaces the listing again on their next poll.', 'openyacht'); ?></p>
+                    </td>
+                </tr>
+            </table>
+
             <h2><?php esc_html_e('Media', 'openyacht'); ?></h2>
             <table class="form-table" role="presentation">
                 <tr>

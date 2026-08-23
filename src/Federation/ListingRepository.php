@@ -21,19 +21,24 @@ interface ListingRepository
     public function update(int $id, array $columns): void;
 
     /**
-     * One serving page, keyset-ordered on (federation_updated_at, id) so
-     * concurrent writes never skip or duplicate rows. Drafts are never
-     * included (LS-7). With $updatedSinceStored: everything whose
-     * federation-visible state changed at or after the timestamp,
-     * terminal listings included (they serialise as tombstones, API-3).
-     * Without: the currently visible inventory only (cold sync).
+     * One page of a partner's feed, keyset-ordered on
+     * (effective_updated_at, id) so concurrent writes never skip or
+     * duplicate rows. Drafts are never included (LS-7); audience rules
+     * narrow the served set per partner.
+     *
+     * With $updatedSinceStored: everything whose federation-visible state
+     * changed for THIS partner at or after the timestamp — content
+     * changes and terminal transitions while visible, plus became-hidden
+     * transitions (which serialise as tombstones) and became-visible
+     * transitions (which resurface the listing) (API-3). Without: the
+     * inventory currently visible to the partner (cold sync).
      *
      * Returns up to $limit + 1 rows so the caller can detect a next page.
      *
      * @param array{updated_at: string, id: int}|null $cursor stored-format position
-     * @return list<Listing>
+     * @return list<FeedItem>
      */
-    public function page(?string $updatedSinceStored, ?array $cursor, int $limit): array;
+    public function feedPage(int $partnerId, ?string $updatedSinceStored, ?array $cursor, int $limit): array;
 
     public function countAll(): int;
 

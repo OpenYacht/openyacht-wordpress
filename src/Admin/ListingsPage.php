@@ -158,6 +158,14 @@ final class ListingsPage
             ]));
         }
 
+        // Audience control: transitions are recorded per partner, so
+        // unsharing tombstones and re-sharing resurfaces on the next poll.
+        $audience = \OpenYacht\Federation\Audience::tryFrom(
+            isset($input['audience']) ? sanitize_key((string) $input['audience']) : 'everyone',
+        ) ?? \OpenYacht\Federation\Audience::Everyone;
+        $selectedPartners = array_map('intval', (array) ($input['audience_partners'] ?? []));
+        Services::sharingService()->setAudience($result, $audience, $selectedPartners);
+
         $this->redirect(['openyacht_notice' => $id > 0 ? 'saved' : 'created']);
     }
 

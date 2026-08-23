@@ -61,6 +61,7 @@ final class Listing
         public readonly array $compliance,
         public readonly ?string $listedAt,
         public readonly ?string $federationUpdatedAt,
+        public readonly Audience $audience = Audience::Everyone,
     ) {
     }
 

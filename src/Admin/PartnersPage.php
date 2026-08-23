@@ -69,6 +69,24 @@ final class PartnersPage
                         : $service->addWithKey($domain, $publicKey);
                     $notice = 'added';
                     break;
+                case 'grants':
+                    $partner = Services::partners()->findByDomain($domain);
+
+                    if ($partner === null) {
+                        break;
+                    }
+
+                    $groups = array_values(array_filter(array_map(
+                        static fn ($value) => \OpenYacht\Federation\FieldGroup::tryFrom(sanitize_key((string) $value))?->value,
+                        isset($_POST['groups']) && is_array($_POST['groups']) ? wp_unslash($_POST['groups']) : [],
+                    )));
+                    // null = every group granted; an explicit list restricts.
+                    Services::partners()->update($partner->id, [
+                        'field_groups' => count($groups) === count(\OpenYacht\Federation\FieldGroup::cases()) ? null : $groups,
+                    ]);
+                    Services::logger()->log('partner', "Field-group grants for {$partner->domain} set to [" . implode(', ', $groups) . ']', 'grants_changed', $partner->id);
+                    $notice = 'grants';
+                    break;
                 case 'approve':
                 case 'block':
                 case 'refresh':
@@ -121,6 +139,7 @@ final class PartnersPage
             'approved' => __('Partner approved.', 'openyacht'),
             'blocked' => __('Partner blocked. All its requests will be rejected.', 'openyacht'),
             'refreshed' => __('Partner keys refreshed.', 'openyacht'),
+            'grants' => __('Sharing rules saved. They apply to every payload this partner receives from now on.', 'openyacht'),
         ];
 
         if (isset($messages[$notice])) {
@@ -134,14 +153,75 @@ final class PartnersPage
             return;
         }
 
+        echo '<div class="wrap">';
+
+        $action = isset($_GET['action']) ? sanitize_key(wp_unslash($_GET['action'])) : '';
+
+        if ($action === 'grants') {
+            $this->renderGrantsForm(isset($_GET['domain']) ? sanitize_text_field(wp_unslash($_GET['domain'])) : '');
+            echo '</div>';
+
+            return;
+        }
+
+        echo '<h1>' . esc_html__('OpenYacht Partners', 'openyacht') . '</h1>';
         $table = new PartnersTable();
         $table->prepare_items();
-
-        echo '<div class="wrap">';
-        echo '<h1>' . esc_html__('OpenYacht Partners', 'openyacht') . '</h1>';
         $table->display();
         $this->renderAddForm();
         echo '</div>';
+    }
+
+    /**
+     * Per-partner field-group grants (LS-14): the admin surface stays
+     * two-dimensional — groups per partner, applied to every listing that
+     * partner can see.
+     */
+    private function renderGrantsForm(string $domain): void
+    {
+        $partner = Services::partners()->findByDomain($domain);
+
+        if ($partner === null) {
+            echo '<h1>' . esc_html__('Partner not found', 'openyacht') . '</h1>';
+
+            return;
+        }
+
+        $granted = $partner->grantedFieldGroups();
+        $labels = [
+            'pricing' => __('Pricing — asking price and currency', 'openyacht'),
+            'location_exact' => __('Exact location — marina and coordinates (display region is always shared)', 'openyacht'),
+            'media_original' => __('Original media — full-resolution imagery', 'openyacht'),
+            'documents' => __('Documents', 'openyacht'),
+            'vessel_identifiers' => __('Vessel identifiers — HIN, IMO, MMSI, official number', 'openyacht'),
+            'history' => __('Price history', 'openyacht'),
+        ];
+
+        echo '<h1>' . esc_html(sprintf(
+            /* translators: %s: partner domain. */
+            __('Sharing with %s', 'openyacht'),
+            $partner->domain,
+        )) . '</h1>';
+        echo '<p class="description">' . esc_html__('Withheld groups are nulled server-side in every payload this partner receives — it cannot distinguish "withheld" from "not on file".', 'openyacht') . '</p>';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::ACTION) . '">';
+        echo '<input type="hidden" name="op" value="grants">';
+        echo '<input type="hidden" name="domain" value="' . esc_attr($partner->domain) . '">';
+        wp_nonce_field(self::ACTION);
+        echo '<table class="form-table" role="presentation"><tr><th scope="row">' . esc_html__('Granted field groups', 'openyacht') . '</th><td><fieldset>';
+
+        foreach (\OpenYacht\Federation\FieldGroup::cases() as $group) {
+            printf(
+                '<label style="display:block;margin-bottom:4px;"><input type="checkbox" name="groups[]" value="%s" %s> %s</label>',
+                esc_attr($group->value),
+                checked(in_array($group, $granted, true), true, false),
+                esc_html($labels[$group->value] ?? $group->value),
+            );
+        }
+
+        echo '</fieldset></td></tr></table>';
+        submit_button(__('Save sharing rules', 'openyacht'));
+        echo '</form>';
     }
 
     private function renderAddForm(): void
