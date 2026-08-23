@@ -40,17 +40,30 @@ final class WpRenditionGenerator implements RenditionGenerator
         try {
             $manifest = [];
             $emitted = [];
+            $lastFailure = null;
 
             foreach (self::WIDTHS as $width) {
-                $this->add($manifest, $emitted, "w{$width}", $this->render($source, $width, false));
+                try {
+                    $this->add($manifest, $emitted, "w{$width}", $this->render($source, $width, false));
+                } catch (RuntimeException $exception) {
+                    $lastFailure = $exception; // One odd rendition never sinks the whole image.
+                }
             }
 
             if ($profileCrops) {
                 $emittedCrops = [];
 
                 foreach (self::WIDTHS as $width) {
-                    $this->add($manifest, $emittedCrops, "crop_{$width}", $this->render($source, $width, true));
+                    try {
+                        $this->add($manifest, $emittedCrops, "crop_{$width}", $this->render($source, $width, true));
+                    } catch (RuntimeException $exception) {
+                        $lastFailure = $exception;
+                    }
                 }
+            }
+
+            if ($manifest === []) {
+                throw $lastFailure ?? new RuntimeException('No renditions could be generated.');
             }
 
             return $manifest;
@@ -109,7 +122,10 @@ final class WpRenditionGenerator implements RenditionGenerator
             $height = null;
         }
 
-        $isSourceSize = $width === $sourceWidth && ($height === null || $height === $sourceHeight);
+        // WP's image_resize_dimensions() bails via wp_fuzzy_number_match
+        // when the target is within 1px of the source — match its fuzz.
+        $isSourceSize = abs($width - $sourceWidth) <= 1
+            && ($height === null || abs($height - $sourceHeight) <= 1);
 
         if (! $isSourceSize) {
             $resized = $editor->resize($width, $height, $crop);
