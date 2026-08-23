@@ -90,6 +90,11 @@ final class PartnersPage
                     Services::sharingService()->refreshPartnerFeed($partner->id, "grants changed for {$partner->domain}");
                     $notice = 'grants';
                     break;
+                case 'directory_refresh':
+                    $count = Services::nodeDirectoryIndex()->refresh();
+                    Services::logger()->log('partner', "Node directory refreshed: {$count} entries", 'directory_refreshed');
+                    $notice = 'directory_refreshed';
+                    break;
                 case 'group_create':
                     $name = isset($_POST['group_name']) ? trim(sanitize_text_field(wp_unslash($_POST['group_name']))) : '';
 
@@ -182,6 +187,7 @@ final class PartnersPage
             'refreshed' => __('Partner keys refreshed.', 'openyacht'),
             'grants' => __('Sharing rules saved. They apply to every payload this partner receives from now on.', 'openyacht'),
             'group_saved' => __('Group saved. Joined partners pick up its listings on their next poll; removed partners receive tombstones.', 'openyacht'),
+            'directory_refreshed' => __('Node directory refreshed from openyacht.org.', 'openyacht'),
             'group_deleted' => __('Group deleted. Listings that shared only through it were tombstoned for its members.', 'openyacht'),
         ];
 
@@ -212,8 +218,85 @@ final class PartnersPage
         $table->prepare_items();
         $table->display();
         $this->renderAddForm();
+        $this->renderDirectory();
         $this->renderGroups();
         echo '</div>';
+    }
+
+    /**
+     * Find partners: the project's advisory node directory, refreshed only
+     * from the canonical URL. Presence conveys existence, nothing more —
+     * adding a node here runs the exact same TOFU well-known verification
+     * as typing its domain by hand.
+     */
+    private function renderDirectory(): void
+    {
+        $index = Services::nodeDirectoryIndex();
+        $entries = $index->entries();
+        $partnered = [];
+
+        foreach (Services::partners()->all() as $partner) {
+            $partnered[$partner->domain] = true;
+        }
+
+        $ownDomain = \OpenYacht\Federation\NodeConfig::identityDomain();
+
+        echo '<hr style="margin:2em 0;">';
+        echo '<h2>' . esc_html__('Find partners', 'openyacht') . '</h2>';
+        echo '<p class="description" style="max-width:640px;">' . esc_html__('The OpenYacht node directory is an opt-in phonebook of nodes that asked to be listed. An entry is not an endorsement and proves nothing — adding a node from here verifies it from its own domain, exactly like typing the domain by hand.', 'openyacht') . '</p>';
+
+        if ($entries === []) {
+            echo '<p>' . esc_html__('The directory is currently empty — the network is young, and listing is optional in both directions.', 'openyacht') . '</p>';
+        } else {
+            echo '<table class="widefat striped" style="max-width:820px;"><thead><tr>';
+            echo '<th>' . esc_html__('Brokerage', 'openyacht') . '</th><th>' . esc_html__('Node domain', 'openyacht') . '</th><th>' . esc_html__('Country', 'openyacht') . '</th><th>' . esc_html__('Listed', 'openyacht') . '</th><th></th>';
+            echo '</tr></thead><tbody>';
+
+            foreach ($entries as $entry) {
+                echo '<tr>';
+                echo '<td><a href="' . esc_url($entry['website']) . '" target="_blank" rel="noopener">' . esc_html($entry['name']) . '</a></td>';
+                echo '<td><code>' . esc_html($entry['domain']) . '</code></td>';
+                echo '<td>' . esc_html($entry['country']) . '</td>';
+                echo '<td>' . esc_html($entry['listed_at']) . '</td>';
+                echo '<td>';
+
+                if ($entry['domain'] === $ownDomain) {
+                    echo '<em>' . esc_html__('This node', 'openyacht') . '</em>';
+                } elseif (isset($partnered[$entry['domain']])) {
+                    echo '<em>' . esc_html__('Already a partner', 'openyacht') . '</em>';
+                } else {
+                    echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+                    echo '<input type="hidden" name="action" value="' . esc_attr(self::ACTION) . '">';
+                    echo '<input type="hidden" name="op" value="add">';
+                    echo '<input type="hidden" name="domain" value="' . esc_attr($entry['domain']) . '">';
+                    wp_nonce_field(self::ACTION);
+                    submit_button(__('Add as partner', 'openyacht'), 'small', '', false);
+                    echo '</form>';
+                }
+
+                echo '</td></tr>';
+            }
+
+            echo '</tbody></table>';
+        }
+
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin-top:8px;display:flex;gap:8px;align-items:center;">';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::ACTION) . '">';
+        echo '<input type="hidden" name="op" value="directory_refresh">';
+        wp_nonce_field(self::ACTION);
+        submit_button(__('Refresh from openyacht.org', 'openyacht'), 'secondary', '', false);
+
+        if ($index->fetchedAt() !== null) {
+            echo '<span class="description">' . esc_html(sprintf(
+                /* translators: %s: UTC datetime. */
+                __('Last refreshed %s UTC.', 'openyacht'),
+                $index->fetchedAt(),
+            )) . '</span>';
+        } else {
+            echo '<span class="description">' . esc_html__('Showing the copy bundled with the plugin.', 'openyacht') . '</span>';
+        }
+
+        echo '</form>';
     }
 
     /**

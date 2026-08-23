@@ -148,6 +148,11 @@ final class Services
         return self::$cache[__FUNCTION__] ??= new WpdbVisibilityEventRepository(self::wpdb());
     }
 
+    public static function nodeDirectoryIndex(): Federation\NodeDirectoryIndex
+    {
+        return self::$cache[__FUNCTION__] ??= new Federation\NodeDirectoryIndex();
+    }
+
     public static function partnerGroups(): PartnerGroupRepository
     {
         return self::$cache[__FUNCTION__] ??= new WpdbPartnerGroupRepository(self::wpdb());
