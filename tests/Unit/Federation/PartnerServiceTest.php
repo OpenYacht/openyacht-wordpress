@@ -120,6 +120,30 @@ final class PartnerServiceTest extends TestCase
         self::assertNotEmpty(array_filter($this->logger->entries, static fn (array $entry): bool => $entry['outcome'] === 'partner_uuid_changed'));
     }
 
+    #[Group('FP-12')]
+    public function testAdminConfirmedRefreshMovesThePinToTheRotatedKey(): void
+    {
+        $document = $this->wellKnown();
+        $document['keys'] = [
+            ['key_id' => str_repeat('b', 16), 'algorithm' => 'ed25519', 'public_key' => base64_encode(random_bytes(32)), 'created_at' => '2026-08-23T00:00:00Z'],
+            ['key_id' => str_repeat('a', 16), 'algorithm' => 'ed25519', 'public_key' => base64_encode(random_bytes(32)), 'created_at' => '2026-08-01T00:00:00Z'],
+        ];
+        $service = $this->service($document);
+        $partner = $this->partners->insert([
+            'domain' => 'broker.example',
+            'node_uuid' => 'aaaaaaaa-1111-2222-3333-444444444444',
+            'trust_level' => TrustLevel::Verified,
+            'pinned_key_id' => str_repeat('a', 16),
+        ]);
+
+        $unconfirmed = $service->refreshKeys($partner);
+        self::assertSame(str_repeat('a', 16), $unconfirmed->pinnedKeyId, 'a plain refresh never moves the pin (FP-12)');
+
+        $confirmed = $service->refreshKeys($partner, confirmPin: true);
+        self::assertSame(str_repeat('b', 16), $confirmed->pinnedKeyId, 'admin confirmation re-pins to the current signing key');
+        self::assertNotEmpty(array_filter($this->logger->entries, static fn (array $entry): bool => $entry['outcome'] === 'partner_repinned'));
+    }
+
     #[Group('FP-11')]
     public function testUnchangedUuidJustRefreshesKeys(): void
     {

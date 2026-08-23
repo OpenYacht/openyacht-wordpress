@@ -94,7 +94,7 @@ final class PartnerService
      * installation: downgrade to provisional and notify administrators
      * (FP-11).
      */
-    public function refreshKeys(Partner $partner): Partner
+    public function refreshKeys(Partner $partner, bool $confirmPin = false): Partner
     {
         $document = $this->wellKnown->fetch($partner->domain);
         $freshUuid = is_string($document['node']['uuid'] ?? null) ? $document['node']['uuid'] : null;
@@ -122,10 +122,29 @@ final class PartnerService
             return $this->fresh($partner);
         }
 
-        $this->partners->update($partner->id, [
+        $columns = [
             'keys_json' => $document['keys'],
             'keys_fetched_at' => $now,
-        ]);
+        ];
+
+        // A pinned partner's rotated key is only accepted after
+        // administrator confirmation (FP-12) — and this IS the
+        // confirmation surface: the admin clicked refresh, so the pin
+        // moves to the partner's current signing key (listed first in the
+        // well-known document by both implementations' convention).
+        $firstKeyId = is_string($document['keys'][0]['key_id'] ?? null) ? $document['keys'][0]['key_id'] : null;
+
+        if ($confirmPin && $partner->pinnedKeyId !== null && $firstKeyId !== null && $firstKeyId !== $partner->pinnedKeyId) {
+            $columns['pinned_key_id'] = $firstKeyId;
+            $this->logger->log(
+                'partner',
+                "Pinned key for {$partner->domain} moved to {$firstKeyId} on administrator confirmation",
+                'partner_repinned',
+                $partner->id,
+            );
+        }
+
+        $this->partners->update($partner->id, $columns);
 
         return $this->fresh($partner);
     }

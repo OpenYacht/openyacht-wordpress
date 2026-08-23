@@ -145,7 +145,7 @@ final class PartnersPage
                     match ($op) {
                         'approve' => $service->approve($partner, get_current_user_id() > 0 ? get_current_user_id() : null),
                         'block' => $service->block($partner),
-                        'refresh' => $service->refreshKeys($partner),
+                        'refresh' => $service->refreshKeys($partner, confirmPin: true),
                     };
                     $notice = $op === 'refresh' ? 'refreshed' : ($op === 'approve' ? 'approved' : 'blocked');
                     break;
