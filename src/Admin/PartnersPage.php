@@ -154,10 +154,14 @@ final class PartnersPage
             set_transient('openyacht_partner_error_' . get_current_user_id(), $exception->getMessage(), 60);
         }
 
-        wp_safe_redirect(add_query_arg(
-            ['page' => self::MENU_SLUG, 'openyacht_notice' => $notice],
-            admin_url('admin.php'),
-        ));
+        // Approval is the moment the partner starts receiving listings, so
+        // land on its sharing screen — grants default to everything, and
+        // this is where that decision should be looked at, not discovered.
+        $args = $notice === 'approved'
+            ? ['page' => self::MENU_SLUG, 'action' => 'grants', 'domain' => $domain, 'openyacht_notice' => $notice]
+            : ['page' => self::MENU_SLUG, 'openyacht_notice' => $notice];
+
+        wp_safe_redirect(add_query_arg($args, admin_url('admin.php')));
         exit;
     }
 
@@ -182,7 +186,7 @@ final class PartnersPage
 
         $messages = [
             'added' => __('Partner added (provisional). Approve it to start receiving requests as a verified partner.', 'openyacht'),
-            'approved' => __('Partner approved.', 'openyacht'),
+            'approved' => __('Partner approved — it starts receiving listings on its next poll. Review below what it gets: every field group is granted by default.', 'openyacht'),
             'blocked' => __('Partner blocked. All its requests will be rejected.', 'openyacht'),
             'refreshed' => __('Partner keys refreshed.', 'openyacht'),
             'grants' => __('Sharing rules saved. They apply to every payload this partner receives from now on.', 'openyacht'),
