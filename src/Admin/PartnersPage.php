@@ -419,14 +419,19 @@ final class PartnersPage
                         <p class="description"><?php esc_html_e('The partner node\'s identity domain. Its discovery document is fetched over verified TLS and the partner starts as provisional.', 'openyacht'); ?></p>
                     </td>
                 </tr>
-                <tr>
-                    <th scope="row"><label for="openyacht_public_key"><?php esc_html_e('Public key (optional)', 'openyacht'); ?></label></th>
-                    <td>
-                        <input name="public_key" type="text" id="openyacht_public_key" class="large-text" placeholder="base64 Ed25519 public key">
-                        <p class="description"><?php esc_html_e('Out-of-band registration: store this pinned key instead of fetching the well-known document — for partner nodes this site cannot resolve.', 'openyacht'); ?></p>
-                    </td>
-                </tr>
             </table>
+            <details style="margin:4px 0 8px;">
+                <summary style="cursor:pointer;"><?php esc_html_e('Advanced: register a key out of band', 'openyacht'); ?></summary>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row"><label for="openyacht_public_key"><?php esc_html_e('Public key', 'openyacht'); ?></label></th>
+                        <td>
+                            <input name="public_key" type="text" id="openyacht_public_key" class="large-text" placeholder="base64 Ed25519 public key">
+                            <p class="description"><?php esc_html_e('Only for partner nodes this site cannot resolve or reach (intranet nodes, split hosting, local development). The pasted key is stored pinned instead of fetching the partner\'s discovery document. Leave empty for a normal add.', 'openyacht'); ?></p>
+                        </td>
+                    </tr>
+                </table>
+            </details>
             <?php submit_button(__('Add partner', 'openyacht')); ?>
         </form>
         <?php
