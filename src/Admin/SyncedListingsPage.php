@@ -27,11 +27,33 @@ final class SyncedListingsPage
         add_action('admin_enqueue_scripts', [$this, 'enqueue']);
     }
 
+    /**
+     * The configured media-storage driver's human label, for copy that
+     * says where cached images live ("Local uploads folder", "Cloudflare R2").
+     */
+    private function storageLabel(): string
+    {
+        $name = \OpenYacht\Admin\Settings::get('storage_driver');
+        $name = is_string($name) && $name !== '' ? $name : 'local';
+        $drivers = \OpenYacht\Media\StorageFactory::drivers();
+
+        return isset($drivers[$name]['label']) ? (string) $drivers[$name]['label'] : $name;
+    }
+
     public function enqueue(string $hook): void
     {
-        if (str_contains($hook, self::MENU_SLUG)) {
-            wp_add_inline_style('common', '.wp-list-table .column-thumb{width:76px}');
+        if (! str_contains($hook, self::MENU_SLUG)) {
+            return;
         }
+
+        wp_add_inline_style('common', '.wp-list-table .column-thumb{width:76px}');
+        wp_enqueue_script(
+            'openyacht-lightbox',
+            plugins_url('assets/admin/lightbox.js', OPENYACHT_FILE),
+            [],
+            OPENYACHT_VERSION,
+            true,
+        );
     }
 
     public function addMenu(): void
@@ -152,7 +174,11 @@ final class SyncedListingsPage
         }
 
         echo '<h1>' . esc_html__('Synced Listings', 'openyacht') . '</h1>';
-        echo '<p class="description">' . esc_html__('All partner listings sync as data automatically. Import the ones you want on this site — importing caches the images locally and hands the listing to your display layer; everything else previews via the partner\'s own thumbnails.', 'openyacht') . '</p>';
+        echo '<p class="description">' . esc_html(sprintf(
+            /* translators: %s: configured media storage label, e.g. "Cloudflare R2". */
+            __('All partner listings sync as data automatically. Import the ones you want on this site — importing caches the images to this site\'s media storage (%s) and hands the listing to your display layer; everything else previews via the partner\'s own thumbnails.', 'openyacht'),
+            $this->storageLabel(),
+        )) . '</p>';
         $this->renderFilters();
 
         $table = new SyncedListingsTable();
@@ -263,7 +289,30 @@ final class SyncedListingsPage
         $summary = $listing['summary'] ?? null;
 
         if (is_string($summary) && $summary !== '') {
-            echo '<p style="max-width:760px;">' . esc_html($summary) . '</p>';
+            echo '<p style="max-width:760px;font-style:italic;">' . esc_html($summary) . '</p>';
+        }
+
+        // The full prose lives in descriptions, not the short summary field.
+        // Wire content is restricted HTML and consumers MUST sanitise before
+        // rendering regardless (LS-5) — the copy stores the payload verbatim.
+        $sanitizer = new \OpenYacht\Federation\RichTextSanitizer();
+
+        foreach ((array) ($payload['descriptions'] ?? []) as $description) {
+            if (! is_array($description) || ! is_string($description['content'] ?? null) || $description['content'] === '') {
+                continue;
+            }
+
+            $section = is_string($description['section'] ?? null) ? $description['section'] : '';
+
+            if ($section !== '') {
+                echo '<h2 style="margin-top:20px;">' . esc_html(ucfirst(str_replace('_', ' ', $section))) . '</h2>';
+            }
+
+            echo '<div style="max-width:760px;">' . wp_kses($sanitizer->sanitize($description['content']), [
+                'p' => [], 'br' => [], 'ul' => [], 'ol' => [], 'li' => [],
+                'strong' => [], 'em' => [], 'h3' => [], 'h4' => [],
+                'a' => ['href' => true, 'rel' => true],
+            ]) . '</div>';
         }
 
         $this->renderCachedImages($copy);
@@ -271,7 +320,11 @@ final class SyncedListingsPage
         echo '<p style="margin-top:12px;">';
         $this->renderToggle($copy);
         echo '</p>';
-        echo '<p class="description" style="max-width:760px;">' . esc_html__('Importing caches every image locally (refreshed on partner updates, deleted on tombstones) and exposes the listing to your site\'s display layer via the OpenYacht read API. Removing it deletes the cached images again.', 'openyacht') . '</p>';
+        echo '<p class="description" style="max-width:760px;">' . esc_html(sprintf(
+            /* translators: %s: configured media storage label, e.g. "Cloudflare R2". */
+            __('Importing caches every image to this site\'s media storage (%s) — refreshed on partner updates, deleted on tombstones — and exposes the listing to your site\'s display layer via the OpenYacht read API. Removing it deletes the cached images again.', 'openyacht'),
+            $this->storageLabel(),
+        )) . '</p>';
     }
 
     private function renderCachedImages(ListingCopy $copy): void
@@ -294,18 +347,21 @@ final class SyncedListingsPage
             return;
         }
 
-        echo '<div style="display:flex;flex-wrap:wrap;gap:8px;max-width:960px;">';
+        echo '<div style="display:flex;flex-wrap:wrap;gap:8px;max-width:960px;" data-openyacht-gallery>';
 
         foreach ($items as $item) {
-            $rendition = $item['renditions']['w480'] ?? (reset($item['renditions']) ?: null);
+            $thumb = $item['renditions']['w480'] ?? (reset($item['renditions']) ?: null);
+            $full = $item['renditions']['w1920'] ?? $item['renditions']['w960'] ?? $thumb;
 
-            if ($rendition === null) {
+            if ($thumb === null || $full === null) {
                 continue;
             }
 
             printf(
-                '<img src="%s" style="width:150px;height:100px;object-fit:cover;border-radius:4px;border:1px solid #c3c4c7;" loading="lazy" alt="%s">',
-                esc_url($rendition['url']),
+                '<a href="%s" data-openyacht-lightbox data-caption="%s"><img src="%s" style="width:150px;height:100px;object-fit:cover;border-radius:4px;border:1px solid #c3c4c7;" loading="lazy" alt="%s"></a>',
+                esc_url($full['url']),
+                esc_attr($item['caption'] ?? ''),
+                esc_url($thumb['url']),
                 esc_attr($item['caption'] ?? ''),
             );
         }

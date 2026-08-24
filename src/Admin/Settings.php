@@ -61,7 +61,7 @@ final class Settings
                 'section' => 'media',
                 'default' => 'local',
                 'options' => $driverOptions,
-                'description' => __('Where cached partner images are stored. Currently this site\'s uploads folder; cloud options (S3, R2) will appear here once a storage add-on plugin is installed.', 'openyacht'),
+                'description' => __('Where cached partner images are stored. Cloud options (e.g. Cloudflare R2) appear here once a storage add-on plugin is installed; "wp openyacht media migrate" moves existing images between them.', 'openyacht'),
             ],
             'delete_data_on_uninstall' => [
                 'label' => __('Delete all data on uninstall', 'openyacht'),

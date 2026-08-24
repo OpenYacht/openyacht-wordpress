@@ -206,7 +206,9 @@ final class MediaCommand
             return;
         }
 
-        if ((bool) ($assocArgs['switch'] ?? false)) {
+        if ($configured === $toName) {
+            WP_CLI::line("Media storage already serves from {$toName}.");
+        } elseif ((bool) ($assocArgs['switch'] ?? false)) {
             $settings = get_option(\OpenYacht\Admin\Settings::OPTION, []);
             $settings = is_array($settings) ? $settings : [];
             $settings['storage_driver'] = $toName;
