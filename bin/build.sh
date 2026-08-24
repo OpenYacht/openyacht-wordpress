@@ -29,6 +29,7 @@ trap 'rm -rf "$STAGE"' EXIT
 echo "Staging openyacht $VERSION ..."
 rsync -a "$PLUGIN_DIR/" "$STAGE/openyacht/" \
     --exclude '.git/' \
+    --exclude '.github/' \
     --exclude '.impeccable/' \
     --exclude '.phpunit.cache/' \
     --exclude 'node_modules/' \

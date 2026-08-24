@@ -1,0 +1,29 @@
+name: Feature request
+description: A concrete improvement to this plugin.
+labels: [enhancement]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: This is a feature for the WordPress plugin — protocol changes belong on the protocol repo.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that the plugin makes hard or impossible? Describe the situation, not just the missing button.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What you would like to happen. Rough is fine.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds or alternatives you considered

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Protocol / specification issues
+    url: https://github.com/OpenYacht/protocol/issues
+    about: Problems with the OpenYacht protocol itself — wire formats, signing, conformance rules — belong on the protocol repo, not this plugin.
+  - name: Questions and support
+    url: https://github.com/OpenYacht/openyacht-wordpress/discussions
+    about: Not sure it's a bug? Setup help, how-do-I questions, and general discussion go here — issues are for actionable bugs and feature requests only.

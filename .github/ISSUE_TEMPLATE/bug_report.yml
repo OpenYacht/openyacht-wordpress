@@ -1,0 +1,61 @@
+name: Bug report
+description: Something in this plugin misbehaves — reproducible, with details.
+labels: [bug]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched existing issues (open and closed) and this is not already reported.
+          required: true
+        - label: This is about the WordPress plugin itself — not the protocol specification, another node implementation, or my hosting setup.
+          required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: Plugins screen, or the Version header in openyacht.php.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: WordPress and PHP versions
+      placeholder: "WP 6.7.1, PHP 8.3"
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Node role where the bug appears
+      options:
+        - Authority (serving my own listings)
+        - Consumer (syncing partner listings)
+        - Both / general
+        - Admin UI only
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what actually happened.
+      placeholder: |
+        1. Went to …
+        2. Clicked …
+        Expected …, but instead …
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output, log lines, or federation error codes
+      description: PHP errors, the WP debug log, wp-cli output, or error envelopes from the other node. Redact anything private.
+      render: text
+  - type: textarea
+    id: other-node
+    attributes:
+      label: If federation is involved — what is on the other end?
+      description: The other node's implementation and version if known (this plugin, the PHP reference app, something else). Not needed for admin-UI bugs.
