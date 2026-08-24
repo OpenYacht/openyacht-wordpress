@@ -53,6 +53,11 @@ final class InboundVerification
             } catch (InvalidWellKnownDocument) {
                 return $this->reject($request, $senderDomain, ErrorCode::PartnerUnknown, "Could not fetch the sender's well-known document.");
             }
+
+            // Unlike openyacht_partner_added (which also fires for
+            // operator-initiated adds), this marks an unsolicited
+            // introduction — the surface admins want notifying about.
+            do_action('openyacht_partner_first_contact', $partner);
         }
 
         if ($partner->trustLevel === TrustLevel::Blocked) {
