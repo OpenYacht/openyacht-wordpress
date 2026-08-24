@@ -68,6 +68,18 @@ final class Plugin
             wp_schedule_event(time(), 'hourly', SyncRunner::HOOK);
         }
 
+        // Retention: the request/sync log channels grow with every inbound
+        // request, so a daily prune keeps the table bounded. Audit channels
+        // (partner, keys, sharing) are never pruned.
+        add_action('openyacht_log_prune', static function (): void {
+            $days = Admin\Settings::get('log_retention_days');
+            Services::logReader()->prune(is_numeric($days) ? (int) $days : 90);
+        });
+
+        if (! wp_next_scheduled('openyacht_log_prune')) {
+            wp_schedule_event(time() + HOUR_IN_SECONDS, 'daily', 'openyacht_log_prune');
+        }
+
         if (defined('WP_CLI') && constant('WP_CLI')) {
             \WP_CLI::add_command('openyacht', Cli\RootCommand::class);
             \WP_CLI::add_command('openyacht partner', Cli\PartnerCommand::class);
@@ -81,6 +93,7 @@ final class Plugin
             (new Admin\PartnersPage())->register();
             (new Admin\ListingsPage())->register();
             (new Admin\SyncedListingsPage())->register();
+            (new Admin\ActivityPage())->register();
             add_action('admin_notices', [$this, 'syncWatchdogNotice']);
         }
     }

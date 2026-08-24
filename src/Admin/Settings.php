@@ -63,6 +63,13 @@ final class Settings
                 'options' => $driverOptions,
                 'description' => __('Where cached partner images are stored. Cloud options (e.g. Cloudflare R2) appear here once a storage add-on plugin is installed; "wp openyacht media migrate" moves existing images between them.', 'openyacht'),
             ],
+            'log_retention_days' => [
+                'label' => __('Keep request logs for (days)', 'openyacht'),
+                'type' => 'text',
+                'section' => 'activity',
+                'default' => '90',
+                'description' => __('Inbound-request and sync entries older than this are pruned daily; partner, key, and sharing history is always kept. 0 keeps everything forever.', 'openyacht'),
+            ],
             'delete_data_on_uninstall' => [
                 'label' => __('Delete all data on uninstall', 'openyacht'),
                 'type' => 'checkbox',
@@ -81,6 +88,7 @@ final class Settings
         return [
             'identity' => __('Node identity', 'openyacht'),
             'media' => __('Partner media', 'openyacht'),
+            'activity' => __('Activity log', 'openyacht'),
             'uninstall' => __('Uninstall', 'openyacht'),
         ];
     }

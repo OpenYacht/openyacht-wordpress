@@ -39,6 +39,7 @@ use OpenYacht\Federation\WpdbKeyRepository;
 use OpenYacht\Federation\WpdbListingMediaRepository;
 use OpenYacht\Federation\WpdbListingRepository;
 use OpenYacht\Federation\WpdbLogger;
+use OpenYacht\Federation\WpdbLogReader;
 use OpenYacht\Federation\WpdbPartnerGroupRepository;
 use OpenYacht\Federation\WpdbPartnerRepository;
 use OpenYacht\Federation\WpdbPriceHistoryRepository;
@@ -79,6 +80,11 @@ final class Services
     public static function logger(): Logger
     {
         return self::$cache[__FUNCTION__] ??= new WpdbLogger(self::wpdb());
+    }
+
+    public static function logReader(): WpdbLogReader
+    {
+        return self::$cache[__FUNCTION__] ??= new WpdbLogReader(self::wpdb());
     }
 
     public static function partnerService(): PartnerService

@@ -62,6 +62,11 @@ class wpdb
 
     public function prepare(string $query, mixed ...$args): string
     {
+        // Like real wpdb: a single array argument carries all values.
+        if (count($args) === 1 && is_array($args[0])) {
+            $args = array_values($args[0]);
+        }
+
         $query = str_replace(['%s', '%d'], ["'%s'", '%d'], $query);
 
         return vsprintf($query, $args);
@@ -92,5 +97,18 @@ class wpdb
         $this->queries[] = $query;
 
         return $this->results;
+    }
+
+    /** @var list<mixed> Programmable get_col() result. */
+    public array $col = [];
+
+    /**
+     * @return list<mixed>
+     */
+    public function get_col(string $query): array
+    {
+        $this->queries[] = $query;
+
+        return $this->col;
     }
 }
