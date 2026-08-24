@@ -2,7 +2,7 @@
 
 WordPress node for the [OpenYacht protocol](https://github.com/OpenYacht/protocol) — publish, share, and sync yacht listings directly between brokerages, with no aggregator in the middle.
 
-> **Status: pre-release.** Built against protocol Draft v0.1 and federating live in development against the [PHP reference implementation](https://github.com/OpenYacht/reference-app) and a production intranet node. Not yet packaged for general installation.
+> **Status: pre-release.** Built against protocol Draft v0.1 and federating live in development against the [PHP reference implementation](https://github.com/OpenYacht/openyacht-reference-app-php) and a production intranet node. Installable from the release zip; updates are self-hosted off this repo's GitHub releases (not wordpress.org).
 
 ## What it does
 
@@ -17,8 +17,29 @@ Listings are data, not posts — display is a separate concern layered on top.
 
 ## Requirements
 
-- WordPress with HTTPS, PHP 8.1+ (developed on 8.4), `ext-sodium`
+- WordPress 6.4+ with HTTPS (activation refuses without it — running non-conformantly is not an option), PHP 8.1+ (developed on 8.4), `ext-sodium`
 - MySQL/MariaDB (custom tables via dbDelta, versioned migrations)
+- A real cron (see below)
+
+## Installation
+
+Upload the `openyacht-<version>.zip` from the latest release via Plugins → Add New → Upload Plugin (or build one with `bin/build.sh`). After activating, WordPress checks this repo's releases for updates like any other plugin.
+
+### Use a real cron job
+
+The protocol obliges a node to keep synced copies no more than 24 hours stale, and the plugin schedules its hourly sync pass (plus queued media downloads) on wp-cron — which only fires when the site gets visits. On a quiet site that means syncs simply stop, and the plugin will show a persistent admin warning when a pass is overdue. Disable visit-triggered cron in `wp-config.php`:
+
+```php
+define('DISABLE_WP_CRON', true);
+```
+
+and run WordPress cron from the system instead, every minute, as the site's user:
+
+```
+* * * * * cd /path/to/site && wp cron event run --due-now --quiet
+```
+
+(Every minute is right: the sync itself stays hourly, but media-fetch events queued seconds after a sync get picked up promptly, and CLI execution frees image downloads from web-request time limits. Without WP-CLI, an every-minute HTTP hit on `wp-cron.php?doing_wp_cron` works too.)
 
 ## Development
 
