@@ -34,6 +34,7 @@ final class Plugin
         });
 
         (new Router())->register();
+        (new Updates())->register();
 
         add_action(SyncRunner::HOOK, static function (): void {
             SyncRunner::run();

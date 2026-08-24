@@ -12,6 +12,7 @@
  * License: AGPL-3.0-only
  * License URI: https://www.gnu.org/licenses/agpl-3.0.html
  * Text Domain: openyacht
+ * Update URI: https://github.com/OpenYacht/openyacht-wordpress
  */
 
 declare(strict_types=1);
