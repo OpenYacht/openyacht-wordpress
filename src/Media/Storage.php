@@ -21,6 +21,12 @@ interface Storage
      */
     public function write(string $path, string $bytes): string;
 
+    /**
+     * The stored bytes; throws when the file is absent. Exists so one
+     * driver can be migrated into another (`wp openyacht media migrate`).
+     */
+    public function read(string $path): string;
+
     public function url(string $path): string;
 
     public function exists(string $path): bool;

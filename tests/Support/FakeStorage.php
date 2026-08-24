@@ -21,6 +21,11 @@ final class FakeStorage implements Storage
         return $path;
     }
 
+    public function read(string $path): string
+    {
+        return $this->files[$path] ?? throw new \RuntimeException("Could not read media file {$path}.");
+    }
+
     public function url(string $path): string
     {
         return 'https://node.test/wp-content/uploads/openyacht/' . $path;

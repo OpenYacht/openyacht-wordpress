@@ -36,6 +36,17 @@ final class LocalStorage implements Storage
         return $path;
     }
 
+    public function read(string $path): string
+    {
+        $bytes = @file_get_contents($this->absolute($this->sanitize($path)));
+
+        if ($bytes === false) {
+            throw new RuntimeException("Could not read media file {$path}.");
+        }
+
+        return $bytes;
+    }
+
     public function url(string $path): string
     {
         $uploads = wp_upload_dir();

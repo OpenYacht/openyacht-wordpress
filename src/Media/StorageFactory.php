@@ -36,7 +36,16 @@ final class StorageFactory
     public static function make(): Storage
     {
         $name = Settings::get('storage_driver');
-        $name = is_string($name) && $name !== '' ? $name : 'local';
+
+        return self::makeFor(is_string($name) && $name !== '' ? $name : 'local');
+    }
+
+    /**
+     * A specific registered driver regardless of which one is configured —
+     * the migration command needs a source and a target side by side.
+     */
+    public static function makeFor(string $name): Storage
+    {
         $drivers = self::drivers();
 
         if (! isset($drivers[$name]['factory'])) {
