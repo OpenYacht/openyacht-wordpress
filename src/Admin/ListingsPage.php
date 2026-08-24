@@ -46,6 +46,18 @@ final class ListingsPage
             return;
         }
 
+        $action = isset($_GET['action']) ? sanitize_key(wp_unslash($_GET['action'])) : '';
+
+        if ($action !== 'new' && $action !== 'edit') {
+            // List view: native WP styling plus a width for the thumbnail
+            // column. The editor bundle must NOT load here — Tailwind's
+            // .fixed utility collides with WP's `fixed` class on
+            // .wp-list-table and position:fixes the whole table.
+            wp_add_inline_style('common', '.wp-list-table .column-thumb{width:76px}');
+
+            return;
+        }
+
         wp_enqueue_media();
         wp_enqueue_editor();
         wp_enqueue_script(

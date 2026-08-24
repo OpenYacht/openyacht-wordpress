@@ -24,6 +24,14 @@ final class SyncedListingsPage
         add_action('admin_menu', [$this, 'addMenu'], 12);
         add_action('admin_post_openyacht_copy_action', [$this, 'handleAction']);
         add_action('admin_notices', [$this, 'notices']);
+        add_action('admin_enqueue_scripts', [$this, 'enqueue']);
+    }
+
+    public function enqueue(string $hook): void
+    {
+        if (str_contains($hook, self::MENU_SLUG)) {
+            wp_add_inline_style('common', '.wp-list-table .column-thumb{width:76px}');
+        }
     }
 
     public function addMenu(): void
