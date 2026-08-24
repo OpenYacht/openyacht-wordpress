@@ -35,6 +35,7 @@ final class PartnersTable extends \WP_List_Table
         return [
             'domain' => __('Domain', 'openyacht'),
             'trust' => __('Trust', 'openyacht'),
+            'sharing' => __('Sharing', 'openyacht'),
             'copies' => __('Synced listings', 'openyacht'),
             'last_ok' => __('Last contact', 'openyacht'),
             'health' => __('Health', 'openyacht'),
@@ -82,6 +83,29 @@ final class PartnersTable extends \WP_List_Table
     public function column_trust($item): string
     {
         return esc_html($item->trustLevel->value);
+    }
+
+    /**
+     * @param Partner $item
+     */
+    public function column_sharing($item): string
+    {
+        $granted = count($item->grantedFieldGroups());
+        $total = count(\OpenYacht\Federation\FieldGroup::cases());
+        $label = $item->fieldGroups === null
+            ? __('All fields', 'openyacht')
+            : sprintf(
+                /* translators: 1: granted field-group count, 2: total field-group count. */
+                __('%1$d of %2$d field groups', 'openyacht'),
+                $granted,
+                $total,
+            );
+        $url = add_query_arg(
+            ['page' => PartnersPage::MENU_SLUG, 'action' => 'grants', 'domain' => $item->domain],
+            admin_url('admin.php'),
+        );
+
+        return '<a href="' . esc_url($url) . '">' . esc_html($label) . '</a>';
     }
 
     /**
