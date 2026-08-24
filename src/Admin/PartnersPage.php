@@ -335,8 +335,10 @@ final class PartnersPage
             }
 
             echo '</fieldset>';
+            echo '<div style="display:flex;gap:16px;align-items:center;">';
             submit_button(__('Save group', 'openyacht'), 'secondary', '', false);
-            echo ' <button type="submit" class="button-link-delete" name="delete_group" value="1" onclick="return confirm(' . esc_attr(wp_json_encode(__('Delete this group? Listings sharing only through it will be tombstoned for its members.', 'openyacht'))) . ');">' . esc_html__('Delete group', 'openyacht') . '</button>';
+            echo '<button type="submit" class="button-link button-link-delete" name="delete_group" value="1" onclick="return confirm(' . esc_attr(wp_json_encode(__('Delete this group? Listings sharing only through it will be tombstoned for its members.', 'openyacht'))) . ');">' . esc_html__('Delete group', 'openyacht') . '</button>';
+            echo '</div>';
             echo '</form>';
         }
 
