@@ -163,44 +163,21 @@ final class MediaCommand
             return;
         }
 
-        $copied = 0;
-        $skipped = 0;
-        $failures = [];
+        $migrator = new \OpenYacht\Media\Migrator(Services::copies(), Services::copyMedia());
+        $result = $migrator->migrate($from, $to, $dryRun);
 
-        foreach (Services::copies()->active() as $copy) {
-            foreach (Services::copyMedia()->forCopy($copy->id) as $item) {
-                foreach ($item->renditions as $rendition) {
-                    $path = $rendition['path'];
-
-                    if ($to->exists($path)) {
-                        $skipped++;
-                        continue;
-                    }
-
-                    if ($dryRun) {
-                        $copied++;
-                        continue;
-                    }
-
-                    try {
-                        $to->write($path, $from->read($path));
-                        $copied++;
-                    } catch (Throwable $exception) {
-                        $failures[] = $path;
-                        WP_CLI::warning("{$path}: {$exception->getMessage()}");
-                    }
-                }
-            }
+        foreach ($result['failures'] as $path => $message) {
+            WP_CLI::warning("{$path}: {$message}");
         }
 
         $verb = $dryRun ? 'Would copy' : 'Copied';
-        WP_CLI::line("{$verb} {$copied} file(s) {$fromName} → {$toName}; {$skipped} already present; " . count($failures) . ' failed.');
+        WP_CLI::line("{$verb} {$result['copied']} file(s) {$fromName} → {$toName}; {$result['skipped']} already present; " . count($result['failures']) . ' failed.');
 
         if ($dryRun) {
             return;
         }
 
-        if ($failures !== []) {
+        if ($result['failures'] !== []) {
             WP_CLI::error('Migration incomplete — nothing was switched or deleted. Re-run to retry the failed files (already-copied ones are skipped).');
 
             return;
@@ -219,21 +196,7 @@ final class MediaCommand
         }
 
         if ((bool) ($assocArgs['delete-source'] ?? false)) {
-            $deleted = 0;
-
-            foreach (Services::copies()->active() as $copy) {
-                foreach (Services::copyMedia()->forCopy($copy->id) as $item) {
-                    foreach ($item->renditions as $rendition) {
-                        if ($to->exists($rendition['path']) && $from->delete($rendition['path'])) {
-                            $deleted++;
-                        }
-                    }
-                }
-
-                $from->deleteDirectory((string) $copy->id);
-            }
-
-            WP_CLI::line("Deleted {$deleted} file(s) from {$fromName}.");
+            WP_CLI::line('Deleted ' . $migrator->deleteSource($from, $to) . " file(s) from {$fromName}.");
         }
 
         WP_CLI::success('Migration complete.');
