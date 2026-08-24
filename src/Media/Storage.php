@@ -12,7 +12,7 @@ namespace OpenYacht\Media;
  *
  * Paths are store-relative ('{copy-id}/{file}'). write() returns the path
  * actually written. Additional drivers (S3 etc.) register via the
- * openyacht_storage_driver filter and ship as separate plugins.
+ * openyacht_storage_drivers filter and ship as separate plugins.
  */
 interface Storage
 {
