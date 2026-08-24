@@ -223,6 +223,15 @@ final class Settings
         }
 
         echo '<div class="wrap"><h1>' . esc_html__('OpenYacht', 'openyacht') . '</h1>';
+
+        // Pages outside the Settings parent menu don't get options.php's
+        // automatic "Settings saved." — surface it ourselves.
+        if (! empty($_GET['settings-updated'])) {
+            add_settings_error('openyacht_settings', 'saved', __('Settings saved.', 'openyacht'), 'success');
+        }
+
+        settings_errors('openyacht_settings');
+
         echo '<form action="options.php" method="post">';
         settings_fields(self::PAGE);
         do_settings_sections(self::PAGE);
