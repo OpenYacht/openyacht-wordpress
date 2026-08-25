@@ -21,6 +21,27 @@ use OpenYacht\Services;
  */
 final class Router
 {
+    /**
+     * The discovery document is public, unsigned, and identical for every
+     * caller, so it may be cached. Deliberately minutes rather than the 24
+     * hours the spec recommends consumers hold it for: that 24 hours is an
+     * application-layer cache the consumer controls and can bypass on a
+     * verification failure to pick up rotated keys (FP-10), whereas an
+     * intermediary honouring our max-age is one they cannot. Key-rotation
+     * recovery is worth far more than the handful of origin hits this
+     * low-volume endpoint saves.
+     *
+     * // federation-protocol.md §Discovery: the well-known endpoint
+     */
+    private const WELL_KNOWN_MAX_AGE = 300;
+
+    /**
+     * Capabilities carry no keys and nothing recovery-critical: the flags
+     * change only on upgrade, and a consumer briefly not seeing a feature
+     * degrades gracefully by design (API-6).
+     */
+    private const CAPABILITIES_MAX_AGE = 3600;
+
     public function register(): void
     {
         add_action('parse_request', [$this, 'maybeDispatch'], 0);
@@ -32,7 +53,7 @@ final class Router
 
         if ($path === '/.well-known/openyacht') {
             $this->guardIdentityDomain();
-            JsonResponder::send(Services::wellKnownDocument()->toArray());
+            JsonResponder::send(Services::wellKnownDocument()->toArray(), cacheSeconds: self::WELL_KNOWN_MAX_AGE);
         }
 
         if (str_starts_with($path, '/openyacht/v1/')) {
@@ -75,7 +96,7 @@ final class Router
                         'page_size_max' => NodeConfig::PAGE_SIZE_MAX,
                         'rate_per_hour' => NodeConfig::RATE_PER_HOUR,
                     ],
-                ]);
+                ], cacheSeconds: self::CAPABILITIES_MAX_AGE);
                 // JsonResponder::send() exits.
                 // no break
             case 'partners/request':

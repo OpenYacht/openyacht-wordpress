@@ -16,12 +16,22 @@ use OpenYacht\Federation\ErrorCode;
 final class JsonResponder
 {
     /**
+     * Responses are uncacheable by default: the signed listing surface is
+     * filtered per partner, so a shared cache entry would serve one
+     * partner's view to another. Only the unsigned public documents pass a
+     * $cacheSeconds, and they say so explicitly.
+     *
      * @param array<string, mixed> $payload
      * @param array<string, string> $headers
      */
-    public static function send(array $payload, int $status = 200, array $headers = []): never
+    public static function send(array $payload, int $status = 200, array $headers = [], int $cacheSeconds = 0): never
     {
-        nocache_headers();
+        if ($cacheSeconds > 0) {
+            header('Cache-Control: public, max-age=' . $cacheSeconds);
+        } else {
+            nocache_headers();
+        }
+
         status_header($status);
         header('Content-Type: application/json; charset=utf-8');
 

@@ -20,6 +20,7 @@ Listings are data, not posts — display is a separate concern layered on top.
 - WordPress 6.4+ with HTTPS (activation refuses without it — running non-conformantly is not an option), PHP 8.1+ (developed on 8.4), `ext-sodium`
 - MySQL/MariaDB (custom tables via dbDelta, versioned migrations)
 - A real cron (see below)
+- A persistent object cache — strongly recommended rather than required (see below)
 
 ## Installation
 
@@ -40,6 +41,14 @@ and run WordPress cron from the system instead, every minute, as the site's user
 ```
 
 (Every minute is right: the sync itself stays hourly, but media-fetch events queued seconds after a sync get picked up promptly, and CLI execution frees image downloads from web-request time limits. Without WP-CLI, an every-minute HTTP hit on `wp-cron.php?doing_wp_cron` works too.)
+
+### Use a persistent object cache
+
+Highly recommended for any node serving real federation traffic — Redis or Memcached with the matching drop-in. Nothing breaks without one, so this is a scaling recommendation and not a conformance one, but the cost lands squarely on the hot path.
+
+Every verified inbound request bumps that partner's rate-limit counter, and the counter is a WordPress transient. Without a persistent object cache a transient *is* rows in `wp_options`, so each request writes two of them — the value and its timeout — on top of the audit row the request already inserts into `{prefix}_openyacht_log`. That write pressure scales directly with how hard partners poll, and a node with several partners on `updated_since` schedules generates it continuously, around the clock, forever. With a persistent object cache the counters never touch the database at all.
+
+Serving side aside, the same cache pays for itself on every admin screen and sync pass, and the responses this node serves are deliberately uncacheable in front of the origin: listings are filtered per partner, so a shared HTTP cache would hand one partner another partner's view. Only `/.well-known/openyacht` and `/openyacht/v1/capabilities` — public, unsigned, identical for every caller — carry a `Cache-Control: public` max-age. The object cache is the layer that absorbs load here, not a page cache.
 
 ## Development
 
