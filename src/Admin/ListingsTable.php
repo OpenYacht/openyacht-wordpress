@@ -18,7 +18,7 @@ if (! class_exists('WP_List_Table')) {
  */
 final class ListingsTable extends \WP_List_Table
 {
-    public function __construct()
+    public function __construct(private readonly string $type = 'sale')
     {
         parent::__construct([
             'singular' => 'listing',
@@ -65,63 +65,12 @@ final class ListingsTable extends \WP_List_Table
         return '<span class="dashicons dashicons-format-image" style="color:#c3c4c7;font-size:32px;width:60px;height:40px;"></span>';
     }
 
-    /**
-     * Sale/charter browsing: one view link per listing type, WP's native
-     * list-table idiom (like Posts' All | Published | Draft). Hidden
-     * while the node only holds one type — today that is sale, so the
-     * row appears the day charter listings exist and not before.
-     *
-     * @return array<string, string>
-     */
-    public function get_views(): array
-    {
-        global $wpdb;
-        $table = (new \OpenYacht\Schema($wpdb))->tableName('listings');
-        $counts = $wpdb->get_results("SELECT type, COUNT(*) AS n FROM {$table} GROUP BY type ORDER BY type", 'ARRAY_A');
-
-        if (! is_array($counts) || count($counts) < 2) {
-            return [];
-        }
-
-        $current = isset($_GET['listing_type']) ? sanitize_key(wp_unslash($_GET['listing_type'])) : '';
-        $labels = ['sale' => __('For sale', 'openyacht'), 'charter' => __('For charter', 'openyacht')];
-        $base = remove_query_arg(['listing_type', 'paged']);
-        $views = [
-            'all' => sprintf(
-                '<a href="%s"%s>%s</a> <span class="count">(%d)</span>',
-                esc_url($base),
-                $current === '' ? ' class="current" aria-current="page"' : '',
-                esc_html__('All', 'openyacht'),
-                array_sum(array_map(static fn (array $row): int => (int) $row['n'], $counts)),
-            ),
-        ];
-
-        foreach ($counts as $row) {
-            $type = (string) $row['type'];
-            $views[$type] = sprintf(
-                '<a href="%s"%s>%s</a> <span class="count">(%d)</span>',
-                esc_url(add_query_arg('listing_type', $type, $base)),
-                $current === $type ? ' class="current" aria-current="page"' : '',
-                esc_html($labels[$type] ?? ucfirst($type)),
-                (int) $row['n'],
-            );
-        }
-
-        return $views;
-    }
-
     public function prepare_items(): void
     {
         global $wpdb;
         $table = (new \OpenYacht\Schema($wpdb))->tableName('listings');
 
-        $where = [];
-        $type = isset($_GET['listing_type']) ? sanitize_key(wp_unslash($_GET['listing_type'])) : '';
-
-        if ($type !== '') {
-            $where[] = $wpdb->prepare('type = %s', $type);
-        }
-
+        $where = [$wpdb->prepare('type = %s', $this->type)];
         $status = isset($_GET['status']) ? sanitize_key(wp_unslash($_GET['status'])) : '';
 
         if (ListingStatus::tryFrom($status) !== null) {
@@ -135,7 +84,7 @@ final class ListingsTable extends \WP_List_Table
             $where[] = $wpdb->prepare('(name LIKE %s OR builder_name LIKE %s OR model_name LIKE %s)', $like, $like, $like);
         }
 
-        $whereSql = $where !== [] ? 'WHERE ' . implode(' AND ', $where) : '';
+        $whereSql = 'WHERE ' . implode(' AND ', $where);
         $ids = array_map('intval', (array) $wpdb->get_col("SELECT id FROM {$table} {$whereSql} ORDER BY federation_updated_at DESC LIMIT 200"));
         $this->items = array_values(array_filter(array_map(
             static fn (int $id) => Services::listings()->find($id),
@@ -150,7 +99,7 @@ final class ListingsTable extends \WP_List_Table
     public function column_name($item): string
     {
         $editUrl = add_query_arg(
-            ['page' => ListingsPage::MENU_SLUG, 'action' => 'edit', 'id' => $item->id],
+            ['page' => ListingsPage::slugFor($item->type), 'action' => 'edit', 'id' => $item->id],
             admin_url('admin.php'),
         );
 

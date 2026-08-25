@@ -18,31 +18,54 @@ final class ListingsPage
 {
     public const MENU_SLUG = 'openyacht-listings';
 
+    /**
+     * One page instance per listing type — sale and charter are separate
+     * screens, mirroring how post types separate them on the display
+     * side. Never mixed in one list.
+     */
+    public function __construct(private readonly string $type = 'sale')
+    {
+    }
+
+    public static function slugFor(string $type): string
+    {
+        return $type === 'charter' ? 'openyacht-charter-listings' : self::MENU_SLUG;
+    }
+
+    private function slug(): string
+    {
+        return self::slugFor($this->type);
+    }
+
     public function register(): void
     {
-        add_action('admin_menu', [$this, 'addMenu'], 11);
-        add_action('admin_post_openyacht_listing_save', [$this, 'handleSave']);
-        add_action('admin_post_openyacht_listing_transition', [$this, 'handleTransition']);
-        add_action('admin_post_openyacht_listing_bulk', [$this, 'handleBulk']);
+        add_action('admin_menu', [$this, 'addMenu'], $this->type === 'sale' ? 11 : 12);
         add_action('admin_notices', [$this, 'notices']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue']);
+
+        // The admin-post handlers are type-agnostic; one registration.
+        if ($this->type === 'sale') {
+            add_action('admin_post_openyacht_listing_save', [$this, 'handleSave']);
+            add_action('admin_post_openyacht_listing_transition', [$this, 'handleTransition']);
+            add_action('admin_post_openyacht_listing_bulk', [$this, 'handleBulk']);
+        }
     }
 
     public function addMenu(): void
     {
         add_submenu_page(
             PartnersPage::MENU_SLUG,
-            __('Listings', 'openyacht'),
-            __('Listings', 'openyacht'),
+            $this->type === 'charter' ? __('Charter Listings', 'openyacht') : __('Sale Listings', 'openyacht'),
+            $this->type === 'charter' ? __('Charter Listings', 'openyacht') : __('Sale Listings', 'openyacht'),
             'manage_options',
-            self::MENU_SLUG,
+            $this->slug(),
             [$this, 'renderPage'],
         );
     }
 
     public function enqueue(string $hook): void
     {
-        if (! str_contains($hook, self::MENU_SLUG)) {
+        if (! str_contains($hook, $this->slug())) {
             return;
         }
 
@@ -128,15 +151,15 @@ final class ListingsPage
 
     private function renderList(): void
     {
-        $newUrl = add_query_arg(['page' => self::MENU_SLUG, 'action' => 'new'], admin_url('admin.php'));
+        $newUrl = add_query_arg(['page' => $this->slug(), 'action' => 'new', 'listing_type' => $this->type], admin_url('admin.php'));
 
-        echo '<h1 class="wp-heading-inline">' . esc_html__('OpenYacht Listings', 'openyacht') . '</h1> ';
+        $heading = $this->type === 'charter' ? __('Charter Listings', 'openyacht') : __('Sale Listings', 'openyacht');
+        echo '<h1 class="wp-heading-inline">' . esc_html($heading) . '</h1> ';
         echo '<a href="' . esc_url($newUrl) . '" class="page-title-action">' . esc_html__('Add New', 'openyacht') . '</a>';
         echo '<hr class="wp-header-end">';
 
-        $table = new ListingsTable();
+        $table = new ListingsTable($this->type);
         $table->prepare_items();
-        $table->views();
 
         $this->renderFilters();
 
@@ -167,16 +190,8 @@ final class ListingsPage
         $currentStatus = isset($_GET['status']) ? sanitize_key(wp_unslash($_GET['status'])) : '';
         $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
 
-        // clear:both drops the filters below the floated type tabs.
-        echo '<form method="get" style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;clear:both;">';
-        echo '<input type="hidden" name="page" value="' . esc_attr(self::MENU_SLUG) . '">';
-
-        // Keep the active sale/charter view when filtering.
-        $currentType = isset($_GET['listing_type']) ? sanitize_key(wp_unslash($_GET['listing_type'])) : '';
-
-        if ($currentType !== '') {
-            echo '<input type="hidden" name="listing_type" value="' . esc_attr($currentType) . '">';
-        }
+        echo '<form method="get" style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+        echo '<input type="hidden" name="page" value="' . esc_attr($this->slug()) . '">';
         echo '<select name="status"><option value="">' . esc_html__('All statuses', 'openyacht') . '</option>';
 
         foreach (ListingStatus::cases() as $status) {
@@ -229,6 +244,8 @@ final class ListingsPage
         // when validation sends the form back, so the work is never lost.
         $form->updateAttachmentAlts($input);
 
+        $listingType = $columns['type'] ?? 'sale';
+
         if ($id > 0) {
             $listing = Services::listings()->find($id);
 
@@ -236,6 +253,7 @@ final class ListingsPage
                 $this->redirect(['openyacht_notice' => 'missing']);
             }
 
+            $listingType = $listing->type;
             $result = Services::ingest()->reviseFromColumns($listing, $columns, $mediaRows);
         } else {
             // New listings are created as drafts; publishing is an explicit
@@ -250,8 +268,9 @@ final class ListingsPage
             $this->redirect(array_filter([
                 'action' => $id > 0 ? 'edit' : 'new',
                 'id' => $id > 0 ? $id : null,
+                'listing_type' => $id > 0 ? null : $listingType,
                 'openyacht_notice' => 'invalid',
-            ]));
+            ]), $listingType);
         }
 
         // Audience control: transitions are recorded per partner, so
@@ -263,7 +282,7 @@ final class ListingsPage
         $selectedGroups = array_map('intval', (array) ($input['audience_groups'] ?? []));
         Services::sharingService()->setAudience($result, $audience, $selectedPartners, $selectedGroups);
 
-        $this->redirect(['openyacht_notice' => $id > 0 ? 'saved' : 'created']);
+        $this->redirect(['openyacht_notice' => $id > 0 ? 'saved' : 'created'], $listingType);
     }
 
     public function handleTransition(): void
@@ -288,10 +307,10 @@ final class ListingsPage
             Services::listingService()->transition($listing, $target);
         } catch (InvalidArgumentException $exception) {
             set_transient($this->transientKey('errors'), [$exception->getMessage()], 120);
-            $this->redirect(['openyacht_notice' => 'invalid_transition']);
+            $this->redirect(['openyacht_notice' => 'invalid_transition'], $listing->type);
         }
 
-        $this->redirect(['openyacht_notice' => 'transitioned']);
+        $this->redirect(['openyacht_notice' => 'transitioned'], $listing->type);
     }
 
     /**
@@ -310,9 +329,10 @@ final class ListingsPage
 
         $target = ListingStatus::tryFrom(isset($_POST['target']) ? sanitize_key(wp_unslash($_POST['target'])) : '');
         $ids = array_map('intval', (array) ($_POST['ids'] ?? []));
+        $bulkType = $ids !== [] ? (Services::listings()->find($ids[0])->type ?? 'sale') : 'sale';
 
         if ($target === null || $ids === []) {
-            $this->redirect(['openyacht_notice' => 'bulk_none']);
+            $this->redirect(['openyacht_notice' => 'bulk_none'], $bulkType);
         }
 
         $applied = 0;
@@ -331,7 +351,7 @@ final class ListingsPage
             $applied++;
         }
 
-        $this->redirect(['openyacht_notice' => 'bulk_transitioned', 'applied' => $applied, 'skipped' => $skipped]);
+        $this->redirect(['openyacht_notice' => 'bulk_transitioned', 'applied' => $applied, 'skipped' => $skipped], $bulkType);
     }
 
     public function notices(): void
@@ -408,9 +428,9 @@ final class ListingsPage
     /**
      * @param array<string, mixed> $args
      */
-    private function redirect(array $args): never
+    private function redirect(array $args, ?string $type = null): never
     {
-        wp_safe_redirect(add_query_arg(['page' => self::MENU_SLUG] + $args, admin_url('admin.php')));
+        wp_safe_redirect(add_query_arg(['page' => self::slugFor($type ?? $this->type)] + $args, admin_url('admin.php')));
         exit;
     }
 

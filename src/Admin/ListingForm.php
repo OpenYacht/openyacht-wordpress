@@ -115,7 +115,7 @@ final class ListingForm
                             <?php esc_html_e('Listing type', 'openyacht'); ?>
                             <select name="oy[listing_type]" class="oy-input mt-1 w-full">
                                 <option value="sale"><?php esc_html_e('For sale', 'openyacht'); ?></option>
-                                <option value="charter" <?php selected(($oldInput['listing_type'] ?? '') === 'charter'); ?>><?php esc_html_e('For charter', 'openyacht'); ?></option>
+                                <option value="charter" <?php selected(($oldInput['listing_type'] ?? (($_GET['listing_type'] ?? '') === 'charter' ? 'charter' : '')) === 'charter'); ?>><?php esc_html_e('For charter', 'openyacht'); ?></option>
                             </select>
                         </label>
                     <?php endif; ?>
@@ -130,7 +130,7 @@ final class ListingForm
                         <button type="submit" class="oy-btn oy-btn-primary w-full">
                             <?php echo esc_html($listing === null ? __('Create draft', 'openyacht') : __('Save changes', 'openyacht')); ?>
                         </button>
-                        <a class="oy-btn oy-btn-ghost w-full" href="<?php echo esc_url(add_query_arg(['page' => ListingsPage::MENU_SLUG], admin_url('admin.php'))); ?>">
+                        <a class="oy-btn oy-btn-ghost w-full" href="<?php echo esc_url(add_query_arg(['page' => ListingsPage::slugFor($listing->type ?? (($_GET['listing_type'] ?? '') === 'charter' ? 'charter' : 'sale'))], admin_url('admin.php'))); ?>">
                             <?php esc_html_e('Back to listings', 'openyacht'); ?>
                         </a>
                     </div>

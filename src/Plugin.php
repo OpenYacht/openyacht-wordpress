@@ -96,8 +96,10 @@ final class Plugin
         if (is_admin()) {
             (new Settings())->register();
             (new Admin\PartnersPage())->register();
-            (new Admin\ListingsPage())->register();
-            (new Admin\SyncedListingsPage())->register();
+            (new Admin\ListingsPage('sale'))->register();
+            (new Admin\ListingsPage('charter'))->register();
+            (new Admin\SyncedListingsPage('sale'))->register();
+            (new Admin\SyncedListingsPage('charter'))->register();
             (new Admin\ActivityPage())->register();
             add_action('admin_notices', [$this, 'syncWatchdogNotice']);
         }

@@ -19,12 +19,34 @@ final class SyncedListingsPage
 {
     public const MENU_SLUG = 'openyacht-synced';
 
+    /**
+     * One page per listing type — sale and charter never mix in one
+     * list, mirroring the per-type post types on the display side.
+     */
+    public function __construct(private readonly string $type = 'sale')
+    {
+    }
+
+    public static function slugFor(string $type): string
+    {
+        return $type === 'charter' ? 'openyacht-synced-charter' : self::MENU_SLUG;
+    }
+
+    private function slug(): string
+    {
+        return self::slugFor($this->type);
+    }
+
     public function register(): void
     {
-        add_action('admin_menu', [$this, 'addMenu'], 12);
-        add_action('admin_post_openyacht_copy_action', [$this, 'handleAction']);
+        add_action('admin_menu', [$this, 'addMenu'], $this->type === 'sale' ? 13 : 14);
         add_action('admin_notices', [$this, 'notices']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue']);
+
+        // The admin-post handler is type-agnostic; one registration.
+        if ($this->type === 'sale') {
+            add_action('admin_post_openyacht_copy_action', [$this, 'handleAction']);
+        }
     }
 
     /**
@@ -42,7 +64,7 @@ final class SyncedListingsPage
 
     public function enqueue(string $hook): void
     {
-        if (! str_contains($hook, self::MENU_SLUG)) {
+        if (! str_contains($hook, self::MENU_SLUG) && ! str_contains($hook, 'openyacht-synced-charter')) {
             return;
         }
 
@@ -60,10 +82,10 @@ final class SyncedListingsPage
     {
         add_submenu_page(
             PartnersPage::MENU_SLUG,
-            __('Synced Listings', 'openyacht'),
-            __('Synced Listings', 'openyacht'),
+            $this->type === 'charter' ? __('Synced Charter', 'openyacht') : __('Synced Sale', 'openyacht'),
+            $this->type === 'charter' ? __('Synced Charter', 'openyacht') : __('Synced Sale', 'openyacht'),
             'manage_options',
-            self::MENU_SLUG,
+            $this->slug(),
             [$this, 'renderPage'],
         );
     }
@@ -81,12 +103,13 @@ final class SyncedListingsPage
         $op = isset($request['op']) ? sanitize_key(wp_unslash($request['op'])) : '';
 
         if (! in_array($op, ['select', 'deselect'], true)) {
-            $this->redirect(['openyacht_notice' => 'missing']);
+            $this->redirect(['openyacht_notice' => 'missing'], 'sale');
         }
 
         $ids = isset($request['copy_ids']) && is_array($request['copy_ids'])
             ? array_map('intval', $request['copy_ids'])
             : array_filter([isset($request['copy_id']) ? (int) $request['copy_id'] : 0]);
+        $redirectType = $ids !== [] ? (Services::copies()->find((int) reset($ids))->type ?? 'sale') : 'sale';
         $applied = 0;
 
         foreach ($ids as $id) {
@@ -96,13 +119,13 @@ final class SyncedListingsPage
         }
 
         if ($applied === 0) {
-            $this->redirect(['openyacht_notice' => 'missing']);
+            $this->redirect(['openyacht_notice' => 'missing'], $redirectType);
         }
 
         $this->redirect([
             'openyacht_notice' => $op === 'select' ? 'selected' : 'deselected',
             'openyacht_count' => $applied,
-        ]);
+        ], $redirectType);
     }
 
     private function apply(int $copyId, bool $select): bool
@@ -133,7 +156,7 @@ final class SyncedListingsPage
 
     public function notices(): void
     {
-        if (! isset($_GET['page']) || $_GET['page'] !== self::MENU_SLUG || ! isset($_GET['openyacht_notice'])) {
+        if (! isset($_GET['page']) || $_GET['page'] !== $this->slug() || ! isset($_GET['openyacht_notice'])) {
             return;
         }
 
@@ -176,15 +199,14 @@ final class SyncedListingsPage
             return;
         }
 
-        echo '<h1>' . esc_html__('Synced Listings', 'openyacht') . '</h1>';
+        echo '<h1>' . esc_html($this->type === 'charter' ? __('Synced Charter Listings', 'openyacht') : __('Synced Sale Listings', 'openyacht')) . '</h1>';
         echo '<p class="description">' . esc_html(sprintf(
             /* translators: %s: configured media storage label, e.g. "Cloudflare R2". */
             __('All partner listings sync as data automatically. Import the ones you want on this site — importing caches the images to this site\'s media storage (%s) and hands the listing to your display layer; everything else previews via the partner\'s own thumbnails.', 'openyacht'),
             $this->storageLabel(),
         )) . '</p>';
-        $table = new SyncedListingsTable();
+        $table = new SyncedListingsTable($this->type);
         $table->prepare_items();
-        $table->views();
 
         $this->renderFilters();
 
@@ -206,16 +228,8 @@ final class SyncedListingsPage
         $currentImported = isset($_GET['imported']) ? sanitize_key(wp_unslash($_GET['imported'])) : '';
         $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
 
-        // clear:both drops the filters below the floated type tabs.
-        echo '<form method="get" style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;clear:both;">';
-
-        // Keep the active sale/charter view when filtering.
-        $currentType = isset($_GET['listing_type']) ? sanitize_key(wp_unslash($_GET['listing_type'])) : '';
-
-        if ($currentType !== '') {
-            echo '<input type="hidden" name="listing_type" value="' . esc_attr($currentType) . '">';
-        }
-        echo '<input type="hidden" name="page" value="' . esc_attr(self::MENU_SLUG) . '">';
+        echo '<form method="get" style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+        echo '<input type="hidden" name="page" value="' . esc_attr($this->slug()) . '">';
 
         echo '<select name="partner"><option value="0">' . esc_html__('All partners', 'openyacht') . '</option>';
 
@@ -253,7 +267,7 @@ final class SyncedListingsPage
 
         $payload = $copy->payload;
         $partner = Data::partner($copy);
-        $backUrl = add_query_arg(['page' => self::MENU_SLUG], admin_url('admin.php'));
+        $backUrl = add_query_arg(['page' => self::slugFor($copy->type)], admin_url('admin.php'));
 
         echo '<h1>' . esc_html($copy->name ?? '(unnamed)') . '</h1>';
         echo '<p><a href="' . esc_url($backUrl) . '">&larr; ' . esc_html__('Back to synced listings', 'openyacht') . '</a></p>';
@@ -276,7 +290,7 @@ final class SyncedListingsPage
             __('Status', 'openyacht') => str_replace('_', ' ', $copy->status) . ($copy->tombstonedAt !== null ? ' (tombstoned)' : ''),
             __('Builder / model', 'openyacht') => trim(($vessel['builder']['name'] ?? '') . ' ' . ($vessel['model']['name'] ?? '')),
             __('Year / LOA', 'openyacht') => trim(($vessel['year_built'] ?? '') . ' / ' . (isset($vessel['loa_m']) ? $vessel['loa_m'] . 'm' : '')),
-            __('Price', 'openyacht') => ! empty($price['on_application']) ? __('POA', 'openyacht') : trim(($price['currency'] ?? '') . ' ' . (isset($price['amount']) ? number_format((float) $price['amount']) : '—')),
+            __('Price', 'openyacht') => $this->priceLine($copy),
             __('Location', 'openyacht') => (string) ($listing['location']['display'] ?? '—'),
             __('Category', 'openyacht') => (string) ($specs['category']['name'] ?? '—'),
             __('Cabins / sleeps', 'openyacht') => trim(($specs['cabins'] ?? '—') . ' / ' . ($specs['sleeps'] ?? '—')),
@@ -401,9 +415,47 @@ final class SyncedListingsPage
     /**
      * @param array<string, mixed> $args
      */
-    private function redirect(array $args): never
+    /**
+     * The preview's price line: the asking price for sale copies, the
+     * weekly rate range for charter copies (which have no asking price
+     * by design; their pricing is the charter rate block).
+     */
+    private function priceLine(ListingCopy $copy): string
     {
-        wp_safe_redirect(add_query_arg(['page' => self::MENU_SLUG] + $args, admin_url('admin.php')));
+        $price = $copy->payload['listing']['price'] ?? [];
+
+        if (! empty($price['on_application'])) {
+            return __('POA', 'openyacht');
+        }
+
+        if (isset($price['amount'], $price['currency'])) {
+            return trim($price['currency'] . ' ' . number_format((float) $price['amount']));
+        }
+
+        $rates = $copy->payload['charter']['rates'] ?? [];
+
+        if (is_array($rates) && $rates !== []) {
+            $mins = array_filter(array_map(static fn (array $rate): ?float => is_numeric($rate['amount_min'] ?? null) ? (float) $rate['amount_min'] : null, $rates));
+            $maxs = array_filter(array_map(static fn (array $rate): ?float => is_numeric($rate['amount_max'] ?? null) ? (float) $rate['amount_max'] : null, $rates));
+            $currency = (string) ($rates[0]['currency'] ?? '');
+
+            if ($mins !== [] && $currency !== '') {
+                $low = number_format(min($mins));
+                $high = $maxs !== [] ? number_format(max($maxs)) : null;
+
+                return $currency . ' ' . ($high !== null && $high !== $low ? $low . '–' . $high : $low) . ' ' . __('/ week', 'openyacht');
+            }
+        }
+
+        return 'EM–';
+    }
+
+    /**
+     * @param array<string, mixed> $args
+     */
+    private function redirect(array $args, ?string $type = null): never
+    {
+        wp_safe_redirect(add_query_arg(['page' => self::slugFor($type ?? $this->type)] + $args, admin_url('admin.php')));
         exit;
     }
 }
