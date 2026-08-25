@@ -11,6 +11,15 @@ interface ListingRepository
     public function findByUuid(string $uuid): ?Listing;
 
     /**
+     * Every own listing regardless of status, newest change first. The
+     * local read surface — callers presenting listings filter drafts out
+     * themselves (Data::ownListings() already does).
+     *
+     * @return list<Listing>
+     */
+    public function all(): array;
+
+    /**
      * @param array<string, mixed> $columns
      */
     public function insert(array $columns): Listing;

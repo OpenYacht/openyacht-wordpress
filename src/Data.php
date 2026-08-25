@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace OpenYacht;
 
 use OpenYacht\Federation\CopyMedia;
+use OpenYacht\Federation\Listing;
 use OpenYacht\Federation\ListingCopy;
+use OpenYacht\Federation\ListingStatus;
 use OpenYacht\Federation\Partner;
 
 /**
@@ -50,6 +52,48 @@ final class Data
     public static function isStale(ListingCopy $copy): bool
     {
         return self::partner($copy)?->isStale() ?? false;
+    }
+
+    /**
+     * This site's own listings, newest change first. Drafts are never
+     * included — they are unpublished authoring state, invisible on every
+     * read surface (the local analogue of LS-7).
+     *
+     * @return list<Listing>
+     */
+    public static function ownListings(): array
+    {
+        return array_values(array_filter(
+            Services::listings()->all(),
+            static fn (Listing $listing): bool => $listing->status !== ListingStatus::Draft,
+        ));
+    }
+
+    /**
+     * One own listing by its authority-minted UUID (drafts included —
+     * deep links from authoring UIs need them; presentation callers list
+     * via ownListings()).
+     */
+    public static function ownListing(string $uuid): ?Listing
+    {
+        return Services::listings()->findByUuid($uuid);
+    }
+
+    /**
+     * The full wire payload (listing-schema.md shape) for either origin —
+     * a copy's verbatim stored payload, or an own listing serialised
+     * ungated. One shape for one rendering code path, whichever side the
+     * listing came from.
+     *
+     * @return array<string, mixed>
+     */
+    public static function wire(Listing|ListingCopy $listing): array
+    {
+        if ($listing instanceof ListingCopy) {
+            return $listing->payload;
+        }
+
+        return Services::listingSerializer()->serialize($listing, null);
     }
 
     /**

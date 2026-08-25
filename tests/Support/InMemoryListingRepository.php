@@ -38,6 +38,11 @@ final class InMemoryListingRepository implements ListingRepository
         return null;
     }
 
+    public function all(): array
+    {
+        return array_values($this->listings);
+    }
+
     public function insert(array $columns): Listing
     {
         $listing = $this->build($this->nextId++, $columns);

@@ -35,6 +35,16 @@ final class WpdbListingRepository implements ListingRepository
         return is_array($row) ? $this->hydrate($row) : null;
     }
 
+    public function all(): array
+    {
+        $rows = $this->wpdb->get_results(
+            "SELECT * FROM {$this->table()} ORDER BY updated_at DESC, id DESC",
+            'ARRAY_A',
+        );
+
+        return array_map(fn (array $row): Listing => $this->hydrate($row), is_array($rows) ? $rows : []);
+    }
+
     public function insert(array $columns): Listing
     {
         $now = gmdate('Y-m-d H:i:s');
