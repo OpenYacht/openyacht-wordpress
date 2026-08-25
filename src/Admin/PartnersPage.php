@@ -17,6 +17,19 @@ final class PartnersPage
 {
     public const MENU_SLUG = 'openyacht-partners';
 
+    /**
+     * The OpenYacht menu mark: a minimal yacht (jib, mainsail, hull),
+     * drawn to stay legible at the sidebar's 20px. Fill is the admin
+     * menu's resting gray — the display addon carries the same mark for
+     * its post type menus; keep the two in sync when it changes.
+     */
+    private const MENU_ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#a7aaad" d="M10.8 2.2V13.2H3.4ZM13 4.8V13.2H19.6ZM2.6 15.4H21.4L18.2 19.6H5.8Z"/></svg>';
+
+    public static function menuIcon(): string
+    {
+        return 'data:image/svg+xml;base64,' . base64_encode(self::MENU_ICON_SVG);
+    }
+
     private const ACTION = 'openyacht_partner';
 
     public function register(): void
@@ -34,7 +47,7 @@ final class PartnersPage
             'manage_options',
             self::MENU_SLUG,
             [$this, 'renderPage'],
-            'dashicons-admin-site-alt3',
+            self::menuIcon(),
             58,
         );
         add_submenu_page(
