@@ -125,6 +125,9 @@ final class SyncedListingsPage
             Services::mediaService()->expire($fresh);
         }
 
+        // Public surface: selection gates what display layers project.
+        do_action('openyacht_copy_selection_changed', $fresh, $select);
+
         return true;
     }
 

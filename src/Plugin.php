@@ -61,6 +61,11 @@ final class Plugin
 
             if ($copy !== null && $copy->tombstonedAt === null && Media\MediaPolicy::shouldCache($copy)) {
                 Services::mediaService()->sync($copy);
+
+                // Public surface: display layers re-project here — copy
+                // events fire before the background fetch, so this is the
+                // first moment cached renditions exist to render.
+                do_action('openyacht_copy_media_cached', $copy);
             }
         });
 
