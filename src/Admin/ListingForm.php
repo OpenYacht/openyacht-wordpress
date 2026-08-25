@@ -104,7 +104,21 @@ final class ListingForm
                         <span class="oy-chip oy-chip-status <?php echo $listing?->status->value === 'active' ? 'is-active' : ''; ?>">
                             <?php echo esc_html(str_replace('_', ' ', $listing?->status->value ?? 'draft')); ?>
                         </span>
+                        <?php if ($listing !== null) : ?>
+                            <span class="oy-chip" title="<?php esc_attr_e('The listing type is set at creation and never changes.', 'openyacht'); ?>">
+                                <?php echo esc_html($listing->type === 'charter' ? __('charter', 'openyacht') : __('sale', 'openyacht')); ?>
+                            </span>
+                        <?php endif; ?>
                     </div>
+                    <?php if ($listing === null) : ?>
+                        <label class="oy-help mt-3 block">
+                            <?php esc_html_e('Listing type', 'openyacht'); ?>
+                            <select name="oy[listing_type]" class="oy-input mt-1 w-full">
+                                <option value="sale"><?php esc_html_e('For sale', 'openyacht'); ?></option>
+                                <option value="charter" <?php selected(($oldInput['listing_type'] ?? '') === 'charter'); ?>><?php esc_html_e('For charter', 'openyacht'); ?></option>
+                            </select>
+                        </label>
+                    <?php endif; ?>
 
                     <nav class="mt-5 flex flex-col gap-0.5" aria-label="<?php esc_attr_e('Listing sections', 'openyacht'); ?>">
                         <?php foreach ($sections as $id => $label) : ?>
@@ -863,6 +877,10 @@ final class ListingForm
             explode(',', (string) ($input['previous_names'] ?? '')),
         ), static fn (string $name): bool => $name !== ''));
 
+        // Only honored at creation — the repositories drop it on update
+        // (type is part of the listing's identity, like the UUID).
+        $type = in_array($input['listing_type'] ?? '', ['sale', 'charter'], true) ? (string) $input['listing_type'] : 'sale';
+
         $spec = is_array($input['spec'] ?? null) ? $input['spec'] : [];
         $specifications = [];
 
@@ -955,6 +973,7 @@ final class ListingForm
         }
 
         return [
+            'type' => $type,
             'name' => $text('name'),
             'summary' => isset($input['summary']) && trim((string) $input['summary']) !== '' ? sanitize_textarea_field((string) $input['summary']) : null,
             'yacht_condition' => in_array($input['condition'] ?? '', ['new', 'used'], true) ? $input['condition'] : null,

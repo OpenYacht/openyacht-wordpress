@@ -61,7 +61,7 @@ final class WpdbListingRepository implements ListingRepository
 
     public function update(int $id, array $columns): void
     {
-        unset($columns['id'], $columns['uuid']); // Canonical identity never changes (ID-1).
+        unset($columns['id'], $columns['uuid'], $columns['type']); // Canonical identity never changes (ID-1); type is part of it.
 
         $this->wpdb->update(
             $this->table(),

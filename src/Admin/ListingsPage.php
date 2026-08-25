@@ -167,7 +167,8 @@ final class ListingsPage
         $currentStatus = isset($_GET['status']) ? sanitize_key(wp_unslash($_GET['status'])) : '';
         $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
 
-        echo '<form method="get" style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+        // clear:both drops the filters below the floated type tabs.
+        echo '<form method="get" style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;clear:both;">';
         echo '<input type="hidden" name="page" value="' . esc_attr(self::MENU_SLUG) . '">';
 
         // Keep the active sale/charter view when filtering.

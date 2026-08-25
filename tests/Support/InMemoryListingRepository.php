@@ -59,7 +59,7 @@ final class InMemoryListingRepository implements ListingRepository
             return;
         }
 
-        unset($columns['id'], $columns['uuid']);
+        unset($columns['id'], $columns['uuid'], $columns['type']);
         $this->listings[$id] = $this->build($id, $columns + $this->toColumns($existing));
     }
 

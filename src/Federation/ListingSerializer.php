@@ -53,7 +53,7 @@ final class ListingSerializer
 
         return [
             'id' => $listing->canonicalUri(),
-            'type' => 'sale',
+            'type' => $listing->type,
             'status' => $listing->status->value,
             'updated_at' => self::rfc3339($listing->federationUpdatedAt),
             'listed_at' => self::rfc3339($listing->listedAt),
@@ -71,7 +71,16 @@ final class ListingSerializer
                 $listing->features,
             )),
             'media' => $this->mediaBlock($listing, $granted(FieldGroup::Documents)),
-            'charter' => null,
+            // Charter listings require the block as an object (schema type
+            // conditional); shape-complete and empty until charter
+            // authoring fields exist — sale listings carry null.
+            'charter' => $listing->type === 'charter' ? [
+                'rates' => [],
+                'operating_areas' => [],
+                'summer_base_port' => null,
+                'winter_base_port' => null,
+                'crew' => [],
+            ] : null,
             'usage' => $this->usage(),
             'compliance' => $this->compliance($listing),
         ];
@@ -125,7 +134,10 @@ final class ListingSerializer
         return [
             'name' => $listing->name,
             'summary' => $listing->summary,
-            'price' => [
+            // Charter listings have no asking price by design — the
+            // schema's type conditional requires null; their pricing is
+            // the charter rate block.
+            'price' => $listing->type === 'charter' ? null : [
                 'amount' => $priceShared ? $listing->priceAmount : null,
                 'currency' => $priceShared ? $listing->priceCurrency : null,
                 'on_application' => $listing->priceOnApplication,

@@ -206,7 +206,8 @@ final class SyncedListingsPage
         $currentImported = isset($_GET['imported']) ? sanitize_key(wp_unslash($_GET['imported'])) : '';
         $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
 
-        echo '<form method="get" style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+        // clear:both drops the filters below the floated type tabs.
+        echo '<form method="get" style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;clear:both;">';
 
         // Keep the active sale/charter view when filtering.
         $currentType = isset($_GET['listing_type']) ? sanitize_key(wp_unslash($_GET['listing_type'])) : '';
