@@ -134,10 +134,11 @@ final class ListingsPage
         echo '<a href="' . esc_url($newUrl) . '" class="page-title-action">' . esc_html__('Add New', 'openyacht') . '</a>';
         echo '<hr class="wp-header-end">';
 
-        $this->renderFilters();
-
         $table = new ListingsTable();
         $table->prepare_items();
+        $table->views();
+
+        $this->renderFilters();
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         echo '<input type="hidden" name="action" value="openyacht_listing_bulk">';
@@ -168,6 +169,13 @@ final class ListingsPage
 
         echo '<form method="get" style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
         echo '<input type="hidden" name="page" value="' . esc_attr(self::MENU_SLUG) . '">';
+
+        // Keep the active sale/charter view when filtering.
+        $currentType = isset($_GET['listing_type']) ? sanitize_key(wp_unslash($_GET['listing_type'])) : '';
+
+        if ($currentType !== '') {
+            echo '<input type="hidden" name="listing_type" value="' . esc_attr($currentType) . '">';
+        }
         echo '<select name="status"><option value="">' . esc_html__('All statuses', 'openyacht') . '</option>';
 
         foreach (ListingStatus::cases() as $status) {

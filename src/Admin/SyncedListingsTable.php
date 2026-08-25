@@ -55,6 +55,52 @@ final class SyncedListingsTable extends \WP_List_Table
         return sprintf('<input type="checkbox" name="copy_ids[]" value="%d" aria-label="%s">', $item->id, esc_attr($item->name ?? ''));
     }
 
+    /**
+     * Sale/charter browsing, mirroring the own-listings screen: one view
+     * link per type in the synced set, hidden while partners only serve
+     * one type.
+     *
+     * @return array<string, string>
+     */
+    public function get_views(): array
+    {
+        $counts = [];
+
+        foreach (Services::copies()->active() as $copy) {
+            $counts[$copy->type] = ($counts[$copy->type] ?? 0) + 1;
+        }
+
+        if (count($counts) < 2) {
+            return [];
+        }
+
+        ksort($counts);
+        $current = isset($_GET['listing_type']) ? sanitize_key(wp_unslash($_GET['listing_type'])) : '';
+        $labels = ['sale' => __('For sale', 'openyacht'), 'charter' => __('For charter', 'openyacht')];
+        $base = remove_query_arg(['listing_type', 'paged']);
+        $views = [
+            'all' => sprintf(
+                '<a href="%s"%s>%s</a> <span class="count">(%d)</span>',
+                esc_url($base),
+                $current === '' ? ' class="current" aria-current="page"' : '',
+                esc_html__('All', 'openyacht'),
+                array_sum($counts),
+            ),
+        ];
+
+        foreach ($counts as $type => $count) {
+            $views[$type] = sprintf(
+                '<a href="%s"%s>%s</a> <span class="count">(%d)</span>',
+                esc_url(add_query_arg('listing_type', $type, $base)),
+                $current === $type ? ' class="current" aria-current="page"' : '',
+                esc_html($labels[$type] ?? ucfirst((string) $type)),
+                $count,
+            );
+        }
+
+        return $views;
+    }
+
     public function prepare_items(): void
     {
         foreach (Services::partners()->all() as $partner) {
@@ -62,6 +108,12 @@ final class SyncedListingsTable extends \WP_List_Table
         }
 
         $copies = Services::copies()->active();
+        $typeFilter = isset($_GET['listing_type']) ? sanitize_key(wp_unslash($_GET['listing_type'])) : '';
+
+        if ($typeFilter !== '') {
+            $copies = array_filter($copies, static fn (ListingCopy $copy): bool => $copy->type === $typeFilter);
+        }
+
         $partnerFilter = isset($_GET['partner']) ? (int) $_GET['partner'] : 0;
         $importFilter = isset($_GET['imported']) ? sanitize_key(wp_unslash($_GET['imported'])) : '';
         $search = isset($_GET['s']) ? strtolower(sanitize_text_field(wp_unslash($_GET['s']))) : '';

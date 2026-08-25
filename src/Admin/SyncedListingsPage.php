@@ -182,10 +182,11 @@ final class SyncedListingsPage
             __('All partner listings sync as data automatically. Import the ones you want on this site — importing caches the images to this site\'s media storage (%s) and hands the listing to your display layer; everything else previews via the partner\'s own thumbnails.', 'openyacht'),
             $this->storageLabel(),
         )) . '</p>';
-        $this->renderFilters();
-
         $table = new SyncedListingsTable();
         $table->prepare_items();
+        $table->views();
+
+        $this->renderFilters();
 
         echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
         echo '<input type="hidden" name="action" value="openyacht_copy_action">';
@@ -206,6 +207,13 @@ final class SyncedListingsPage
         $search = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
 
         echo '<form method="get" style="margin:8px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+
+        // Keep the active sale/charter view when filtering.
+        $currentType = isset($_GET['listing_type']) ? sanitize_key(wp_unslash($_GET['listing_type'])) : '';
+
+        if ($currentType !== '') {
+            echo '<input type="hidden" name="listing_type" value="' . esc_attr($currentType) . '">';
+        }
         echo '<input type="hidden" name="page" value="' . esc_attr(self::MENU_SLUG) . '">';
 
         echo '<select name="partner"><option value="0">' . esc_html__('All partners', 'openyacht') . '</option>';
