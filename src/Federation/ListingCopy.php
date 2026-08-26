@@ -53,4 +53,36 @@ final class ListingCopy
 
         return is_string($url) && str_starts_with(strtolower($url), 'https://') ? $url : null;
     }
+
+    /**
+     * Authority-hosted gallery thumbnails, in wire sort order. Nullable on
+     * the wire (LS-16) and absent entirely in pre-amendment payloads, so
+     * this is only the items that actually carry one — pre-import previews
+     * never hotlink the full-resolution url.
+     *
+     * @return list<array{thumbnail_url: string, url: ?string, caption: ?string}>
+     */
+    public function galleryThumbnails(): array
+    {
+        $gallery = $this->payload['media']['gallery'] ?? null;
+        $thumbnails = [];
+
+        foreach (is_array($gallery) ? $gallery : [] as $item) {
+            $thumbnail = is_array($item) ? ($item['thumbnail_url'] ?? null) : null;
+
+            if (! is_string($thumbnail) || ! str_starts_with(strtolower($thumbnail), 'https://')) {
+                continue;
+            }
+
+            $url = $item['url'] ?? null;
+            $caption = $item['caption'] ?? null;
+            $thumbnails[] = [
+                'thumbnail_url' => $thumbnail,
+                'url' => is_string($url) && str_starts_with(strtolower($url), 'https://') ? $url : null,
+                'caption' => is_string($caption) ? $caption : null,
+            ];
+        }
+
+        return $thumbnails;
+    }
 }

@@ -150,4 +150,24 @@ final class IngestServiceTest extends TestCase
         self::assertSame('WIRE TEST', $result->name);
         self::assertStringNotContainsString('script', (string) json_encode($result->descriptions), 'descriptions sanitised on input (LS-4)');
     }
+
+    public function testGalleryThumbnailsStoreOnIngestAndOmittingThemStaysValid(): void
+    {
+        $result = $this->ingest->publish([
+            'status' => 'active',
+            'listing' => ['name' => 'THUMB TEST', 'price' => ['amount' => '2000000', 'currency' => 'USD']],
+            'specifications' => ['power_or_sail' => 'power'],
+            'media' => ['gallery' => [
+                ['url' => 'https://node.test/u/aft.jpg', 'thumbnail_url' => 'https://node.test/u/aft-t.jpg', 'sha256' => str_repeat('ab', 32), 'width' => 1600, 'height' => 1000],
+                // pre-amendment caller shape: no thumbnail_url key
+                ['url' => 'https://node.test/u/bow.jpg', 'sha256' => str_repeat('cd', 32), 'width' => 1600, 'height' => 1000],
+            ]],
+        ]);
+
+        self::assertNotInstanceOf(\WP_Error::class, $result);
+        $media = $this->media->forListing($result->id);
+        self::assertCount(2, $media);
+        self::assertSame('https://node.test/u/aft-t.jpg', $media[0]->thumbnailUrl);
+        self::assertNull($media[1]->thumbnailUrl, 'omitted thumbnail_url ingests as null, the valid wire value');
+    }
 }

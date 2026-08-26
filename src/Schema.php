@@ -13,7 +13,7 @@ namespace OpenYacht;
  */
 final class Schema
 {
-    public const VERSION = 5;
+    public const VERSION = 6;
 
     public const OPTION = 'openyacht_schema_version';
 
@@ -44,8 +44,41 @@ final class Schema
 
     public function maybeUpgrade(): void
     {
-        if ((int) get_option(self::OPTION, 0) !== self::VERSION) {
-            $this->install();
+        $from = (int) get_option(self::OPTION, 0);
+
+        if ($from === self::VERSION) {
+            return;
+        }
+
+        $this->install();
+
+        if ($from > 0 && $from < 6) {
+            $this->backfillMediaThumbnails();
+        }
+    }
+
+    /**
+     * v6 data migration: the protocol widened the thumbnail exception to
+     * gallery and layout items (nullable thumbnail_url, LS-16). Rows picked
+     * before the change carry an attachment_id but no stored thumbnail —
+     * compute one from the attachment's renditions, exactly as the listing
+     * form now does at save time. Rows stay null when WP has no rendition
+     * smaller than the original: that is the honest wire value.
+     */
+    private function backfillMediaThumbnails(): void
+    {
+        $table = $this->tableName('listing_media');
+        $rows = $this->wpdb->get_results(
+            "SELECT id, attachment_id, url FROM {$table} WHERE kind IN ('gallery', 'layout') AND thumbnail_url IS NULL AND attachment_id IS NOT NULL",
+            'ARRAY_A',
+        );
+
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            $thumbnail = wp_get_attachment_image_url((int) $row['attachment_id'], 'medium_large');
+
+            if (is_string($thumbnail) && $thumbnail !== $row['url']) {
+                $this->wpdb->update($table, ['thumbnail_url' => $thumbnail], ['id' => (int) $row['id']]);
+            }
         }
     }
 

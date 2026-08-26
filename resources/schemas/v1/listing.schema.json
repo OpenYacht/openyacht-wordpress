@@ -418,6 +418,7 @@
     },
     "gallery_item": {
       "type": "object",
+      "description": "thumbnail_url is nullable: null means no small rendition is served and consumers derive from url.",
       "properties": {
         "url": { "$ref": "#/$defs/uri" },
         "sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
@@ -425,23 +426,26 @@
         "width": { "type": ["integer", "null"] },
         "height": { "type": ["integer", "null"] },
         "caption": { "type": ["string", "null"] },
-        "sort": { "type": "integer" }
+        "sort": { "type": "integer" },
+        "thumbnail_url": { "anyOf": [{ "$ref": "#/$defs/uri" }, { "type": "null" }] }
       },
-      "required": ["url", "sha256", "category", "width", "height", "caption", "sort"],
+      "required": ["url", "sha256", "category", "width", "height", "caption", "sort", "thumbnail_url"],
       "patternProperties": { "^x_": true },
       "additionalProperties": false
     },
     "layout_item": {
       "type": "object",
+      "description": "thumbnail_url is nullable: null means no small rendition is served and consumers derive from url.",
       "properties": {
         "url": { "$ref": "#/$defs/uri" },
         "sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
         "width": { "type": ["integer", "null"] },
         "height": { "type": ["integer", "null"] },
         "caption": { "type": ["string", "null"] },
-        "sort": { "type": "integer" }
+        "sort": { "type": "integer" },
+        "thumbnail_url": { "anyOf": [{ "$ref": "#/$defs/uri" }, { "type": "null" }] }
       },
-      "required": ["url", "sha256", "width", "height", "caption", "sort"],
+      "required": ["url", "sha256", "width", "height", "caption", "sort", "thumbnail_url"],
       "patternProperties": { "^x_": true },
       "additionalProperties": false
     },

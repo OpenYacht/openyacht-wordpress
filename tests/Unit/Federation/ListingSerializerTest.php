@@ -182,7 +182,7 @@ final class ListingSerializerTest extends TestCase
         $this->prices->append(1, '12500000', 'EUR');
         $hash = str_repeat('ab', 32);
         $this->media->insert(['listing_id' => 1, 'kind' => 'profile', 'url' => 'https://node.test/u/hero.jpg', 'thumbnail_url' => 'https://node.test/u/hero-t.jpg', 'sha256' => $hash, 'width' => 1600, 'height' => 1000, 'sort' => 0]);
-        $this->media->insert(['listing_id' => 1, 'kind' => 'gallery', 'url' => 'https://node.test/u/aft.jpg', 'sha256' => $hash, 'category' => 'exterior', 'width' => 1600, 'height' => 1000, 'caption' => 'Aft deck', 'sort' => 1]);
+        $this->media->insert(['listing_id' => 1, 'kind' => 'gallery', 'url' => 'https://node.test/u/aft.jpg', 'thumbnail_url' => 'https://node.test/u/aft-t.jpg', 'sha256' => $hash, 'category' => 'exterior', 'width' => 1600, 'height' => 1000, 'caption' => 'Aft deck', 'sort' => 1]);
         $this->media->insert(['listing_id' => 1, 'kind' => 'layout', 'url' => 'https://node.test/u/ga.jpg', 'sha256' => $hash, 'width' => 2000, 'height' => 1400, 'sort' => 1]);
         $this->media->insert(['listing_id' => 1, 'kind' => 'video', 'url' => 'https://video.example/tour', 'caption' => 'Walkthrough', 'sort' => 1]);
         $this->media->insert(['listing_id' => 1, 'kind' => 'tour', 'url' => 'https://tour.example/360', 'sort' => 1]);
@@ -191,7 +191,9 @@ final class ListingSerializerTest extends TestCase
         $wire = $this->serializer()->serialize($this->listing(), null);
 
         self::assertSame('exterior', $wire['media']['gallery'][0]['category']);
+        self::assertSame('https://node.test/u/aft-t.jpg', $wire['media']['gallery'][0]['thumbnail_url']);
         self::assertSame('https://node.test/u/ga.jpg', $wire['media']['layouts'][0]['url']);
+        self::assertNull($wire['media']['layouts'][0]['thumbnail_url'], 'thumbnail_url is a required key, null when no small rendition is served (LS-16)');
         self::assertArrayNotHasKey('category', $wire['media']['layouts'][0], 'layout_item has no category');
         self::assertSame('Walkthrough', $wire['media']['videos'][0]['caption']);
         self::assertArrayNotHasKey('sha256', $wire['media']['tours'][0], 'tour_item carries no content hash');

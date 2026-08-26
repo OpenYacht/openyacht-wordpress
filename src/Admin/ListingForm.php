@@ -1105,7 +1105,11 @@ final class ListingForm
         }
 
         $size = $kind === 'document' ? false : wp_getimagesize($file);
-        $thumbnail = wp_get_attachment_image_url($attachmentId, 'large');
+        // The profile thumbnail is mandatory on the wire (falls back to the
+        // full url); gallery/layout thumbnails are nullable — when WP has no
+        // smaller rendition than the original, null is the honest answer
+        // (LS-16: a thumbnail is a rendition of the same image, ~400–640px).
+        $thumbnail = wp_get_attachment_image_url($attachmentId, $kind === 'profile' ? 'large' : 'medium_large');
         $caption = wp_get_attachment_caption($attachmentId);
 
         if (($caption === '' || $caption === false) && $kind === 'document') {
@@ -1116,7 +1120,11 @@ final class ListingForm
             'kind' => $kind,
             'attachment_id' => $attachmentId,
             'url' => $url,
-            'thumbnail_url' => $kind === 'profile' ? (is_string($thumbnail) ? $thumbnail : $url) : null,
+            'thumbnail_url' => match (true) {
+                $kind === 'profile' => is_string($thumbnail) ? $thumbnail : $url,
+                $kind === 'gallery', $kind === 'layout' => is_string($thumbnail) && $thumbnail !== $url ? $thumbnail : null,
+                default => null,
+            },
             'sha256' => hash_file('sha256', $file) ?: null,
             'width' => is_array($size) ? (int) $size[0] : null,
             'height' => is_array($size) ? (int) $size[1] : null,

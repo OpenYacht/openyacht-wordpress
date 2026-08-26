@@ -213,7 +213,9 @@ final class ListingSerializer
     /**
      * Media with content hashes; the profile hero and its thumbnail are
      * mandatory whenever imagery exists, and a listing with no imagery has
-     * profile: null — never a placeholder (LS-8).
+     * profile: null — never a placeholder (LS-8). Gallery and layout items
+     * carry a nullable thumbnail_url — null means no small rendition is
+     * served and consumers derive from url (LS-16).
      *
      * @return array<string, mixed>
      */
@@ -251,6 +253,7 @@ final class ListingSerializer
                     'height' => $item->height,
                     'caption' => $item->caption,
                     'sort' => $sort,
+                    'thumbnail_url' => $item->thumbnailUrl,
                 ],
                 'layout' => [
                     'url' => $item->url,
@@ -259,6 +262,7 @@ final class ListingSerializer
                     'height' => $item->height,
                     'caption' => $item->caption,
                     'sort' => $sort,
+                    'thumbnail_url' => $item->thumbnailUrl,
                 ],
                 'video', 'document' => [
                     'url' => $item->url,

@@ -11,9 +11,10 @@ use OpenYacht\Services;
 
 /**
  * Browse and preview partner listings, and pick what to import. Preview
- * imagery is the authority-hosted thumbnail from the wire; importing a
- * copy caches its media locally, removing it purges the cache (usage
- * terms, ID-10).
+ * imagery is the authority-hosted thumbnails from the wire — profile plus
+ * any gallery thumbnails (LS-16) — so curation needs no local image
+ * pipeline; importing a copy caches its media locally, removing it purges
+ * the cache (usage terms, ID-10).
  */
 final class SyncedListingsPage
 {
@@ -342,6 +343,7 @@ final class SyncedListingsPage
         }
 
         $this->renderCachedImages($copy);
+        $this->renderWireGallery($copy);
 
         echo '<p style="margin-top:12px;">';
         $this->renderToggle($copy);
@@ -390,6 +392,55 @@ final class SyncedListingsPage
                 esc_url($thumb['url']),
                 esc_attr($item['caption'] ?? ''),
             );
+        }
+
+        echo '</div>';
+    }
+
+    /**
+     * Pre-import gallery preview from the authority's own gallery
+     * thumbnails — the wire addition that lets curation happen before any
+     * media is cached. Items without a thumbnail (null on the wire, or
+     * pre-amendment payloads) are simply absent; the grid never hotlinks
+     * full-resolution images. Selected copies show the cached grid instead.
+     */
+    private function renderWireGallery(ListingCopy $copy): void
+    {
+        if ($copy->isSelected()) {
+            return;
+        }
+
+        $items = $copy->galleryThumbnails();
+
+        if ($items === []) {
+            return;
+        }
+
+        echo '<h2 style="margin-top:20px;">' . esc_html(sprintf(
+            /* translators: %d: number of gallery images with an authority-hosted thumbnail. */
+            __('Gallery preview (%d)', 'openyacht'),
+            count($items),
+        )) . '</h2>';
+        echo '<p class="description">' . esc_html__('Previews are served by the partner; importing caches the full-size images to this site.', 'openyacht') . '</p>';
+        echo '<div style="display:flex;flex-wrap:wrap;gap:8px;max-width:960px;" data-openyacht-gallery>';
+
+        foreach ($items as $item) {
+            $image = sprintf(
+                '<img src="%s" style="width:150px;height:100px;object-fit:cover;border-radius:4px;border:1px solid #c3c4c7;" loading="lazy" alt="%s">',
+                esc_url($item['thumbnail_url']),
+                esc_attr($item['caption'] ?? ''),
+            );
+
+            if ($item['url'] !== null) {
+                printf(
+                    '<a href="%s" data-openyacht-lightbox data-caption="%s">%s</a>',
+                    esc_url($item['url']),
+                    esc_attr($item['caption'] ?? ''),
+                    $image, // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built above from escaped parts
+                );
+            } else {
+                echo $image; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built above from escaped parts
+            }
         }
 
         echo '</div>';
