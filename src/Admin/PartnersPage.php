@@ -72,6 +72,7 @@ final class PartnersPage
         $domain = isset($_POST['domain']) ? strtolower(sanitize_text_field(wp_unslash($_POST['domain']))) : '';
         $service = Services::partnerService();
         $notice = 'error';
+        $syncCounts = [];
 
         try {
             switch ($op) {
@@ -146,6 +147,32 @@ final class PartnersPage
                     Services::logger()->log('partner', "Partner group \"{$group->name}\" saved: {$result['revealed']} pair(s) gain visibility, {$result['hidden']} lose it", 'group_saved');
                     $notice = 'group_saved';
                     break;
+                case 'sync_now':
+                    $partner = Services::partners()->findByDomain($domain);
+
+                    if ($partner === null || $partner->trustLevel === \OpenYacht\Federation\TrustLevel::Blocked) {
+                        break;
+                    }
+
+                    // Deliberate human click: no backoff gate — asking to
+                    // retry a failing partner right now is exactly the
+                    // point. The cron watchdog's last-run option is left
+                    // alone, so a single manual sync can't mask a sleeping
+                    // wp-cron.
+                    $result = Services::syncService()->sync($partner);
+                    Services::logger()->log(
+                        'sync',
+                        "Synced {$partner->domain}: {$result->created} created, {$result->updated} updated, {$result->tombstoned} tombstoned",
+                        'ok',
+                        $partner->id,
+                    );
+                    $syncCounts = [
+                        'oy_created' => $result->created,
+                        'oy_updated' => $result->updated,
+                        'oy_tombstoned' => $result->tombstoned,
+                    ];
+                    $notice = 'synced';
+                    break;
                 case 'approve':
                 case 'block':
                 case 'refresh':
@@ -172,7 +199,7 @@ final class PartnersPage
         // this is where that decision should be looked at, not discovered.
         $args = $notice === 'approved'
             ? ['page' => self::MENU_SLUG, 'action' => 'grants', 'domain' => $domain, 'openyacht_notice' => $notice]
-            : ['page' => self::MENU_SLUG, 'openyacht_notice' => $notice];
+            : ['page' => self::MENU_SLUG, 'openyacht_notice' => $notice] + $syncCounts;
 
         wp_safe_redirect(add_query_arg($args, admin_url('admin.php')));
         exit;
@@ -192,6 +219,21 @@ final class PartnersPage
             printf(
                 '<div class="notice notice-error is-dismissible"><p>%s</p></div>',
                 esc_html(is_string($message) && $message !== '' ? $message : __('The partner action failed.', 'openyacht')),
+            );
+
+            return;
+        }
+
+        if ($notice === 'synced') {
+            printf(
+                '<div class="notice notice-success is-dismissible"><p>%s</p></div>',
+                esc_html(sprintf(
+                    /* translators: 1: created count, 2: updated count, 3: tombstoned count. */
+                    __('Sync complete: %1$d created, %2$d updated, %3$d tombstoned.', 'openyacht'),
+                    isset($_GET['oy_created']) ? (int) $_GET['oy_created'] : 0,
+                    isset($_GET['oy_updated']) ? (int) $_GET['oy_updated'] : 0,
+                    isset($_GET['oy_tombstoned']) ? (int) $_GET['oy_tombstoned'] : 0,
+                )),
             );
 
             return;

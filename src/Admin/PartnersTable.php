@@ -63,6 +63,7 @@ final class PartnersTable extends \WP_List_Table
         }
 
         if ($item->trustLevel !== TrustLevel::Blocked) {
+            $actions['sync_now'] = $this->actionButton($item, 'sync_now', __('Sync now', 'openyacht'));
             $actions['block'] = $this->actionButton($item, 'block', __('Block', 'openyacht'));
         }
 
