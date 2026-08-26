@@ -109,6 +109,34 @@ final class SchemaTest extends TestCase
             'data' => ['thumbnail_url' => 'https://node.test/u/aft-768.jpg'],
             'where' => ['id' => 1],
         ]], $this->wpdb->updated, 'only rows with a genuinely smaller rendition are backfilled');
+        self::assertNotEmpty($this->stampQueries(), 'a v5 upgrade also stamps affected listings (wire shape changed)');
+    }
+
+    public function testUpgradeFromV6StampsListingsWhoseWireShapeChanged(): void
+    {
+        $GLOBALS['openyacht_dbdelta_calls'] = [];
+
+        Functions\expect('get_option')->once()->with(Schema::OPTION, 0)->andReturn(6);
+        Functions\expect('update_option')->once()->andReturn(true);
+        // Thumbnails were already backfilled by v6 — no attachment lookups.
+        Functions\expect('wp_get_attachment_image_url')->never();
+
+        (new Schema($this->wpdb))->maybeUpgrade();
+
+        $stamps = $this->stampQueries();
+        self::assertCount(1, $stamps);
+        self::assertStringContainsString("m.kind IN ('gallery', 'layout')", $stamps[0], 'only listings whose wire representation changed are re-delivered');
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function stampQueries(): array
+    {
+        return array_values(array_filter(
+            $this->wpdb->queries,
+            static fn (string $sql): bool => str_contains($sql, 'federation_updated_at') && str_starts_with($sql, 'UPDATE wp_openyacht_listings'),
+        ));
     }
 
     public function testUninstallDropsExactlyTheDeclaredTables(): void

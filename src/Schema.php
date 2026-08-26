@@ -13,7 +13,7 @@ namespace OpenYacht;
  */
 final class Schema
 {
-    public const VERSION = 6;
+    public const VERSION = 7;
 
     public const OPTION = 'openyacht_schema_version';
 
@@ -55,6 +55,10 @@ final class Schema
         if ($from > 0 && $from < 6) {
             $this->backfillMediaThumbnails();
         }
+
+        if ($from > 0 && $from < 7) {
+            $this->stampListingsWithGalleryOrLayoutMedia();
+        }
     }
 
     /**
@@ -80,6 +84,29 @@ final class Schema
                 $this->wpdb->update($table, ['thumbnail_url' => $thumbnail], ['id' => (int) $row['id']]);
             }
         }
+    }
+
+    /**
+     * v7 data migration, and the standing rule it establishes: a migration
+     * that changes what a listing serves on the wire MUST stamp
+     * federation_updated_at for the affected listings — the representation
+     * changed, and that column is both the wire updated_at and the sync
+     * cursor (API-4), so partners only re-deliver what it says changed.
+     *
+     * Here: v6 added thumbnail_url to every gallery and layout item, so
+     * every listing carrying such media has a new wire shape. Stamping
+     * runs for upgrades from v5 AND v6 — nodes that already took the v6
+     * migration before this rule existed still owe partners the re-sync.
+     */
+    private function stampListingsWithGalleryOrLayoutMedia(): void
+    {
+        $listings = $this->tableName('listings');
+        $media = $this->tableName('listing_media');
+
+        $this->wpdb->query($this->wpdb->prepare(
+            "UPDATE {$listings} l SET l.federation_updated_at = %s WHERE EXISTS (SELECT 1 FROM {$media} m WHERE m.listing_id = l.id AND m.kind IN ('gallery', 'layout'))",
+            gmdate('Y-m-d H:i:s'),
+        ));
     }
 
     public function install(): void
