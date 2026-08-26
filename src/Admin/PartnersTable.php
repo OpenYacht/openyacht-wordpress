@@ -56,7 +56,10 @@ final class PartnersTable extends \WP_List_Table
         $actions = [];
 
         if ($item->trustLevel !== TrustLevel::Verified) {
-            $actions['approve'] = $this->actionButton($item, 'approve', __('Approve', 'openyacht'));
+            // The array key becomes the row-action span's CSS class, and
+            // core's common.css globally hides `.approve` (comments-list
+            // styling) — so the key must not be literally "approve".
+            $actions['approve_partner'] = $this->actionButton($item, 'approve', __('Approve', 'openyacht'));
         }
 
         if ($item->trustLevel !== TrustLevel::Blocked) {
