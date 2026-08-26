@@ -4,7 +4,7 @@
  * Plugin Name: OpenYacht
  * Plugin URI: https://openyacht.org
  * Description: Turns this WordPress site into an OpenYacht node — federated yacht-listing sharing between brokerages.
- * Version: 0.4.2
+ * Version: 0.4.3
  * Requires at least: 6.4
  * Requires PHP: 8.1
  * Author: OpenYacht
@@ -25,7 +25,7 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
-define('OPENYACHT_VERSION', '0.4.2');
+define('OPENYACHT_VERSION', '0.4.3');
 define('OPENYACHT_FILE', __FILE__);
 define('OPENYACHT_PATH', __DIR__);
 
