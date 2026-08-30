@@ -33,6 +33,22 @@ final class RichTextSanitizerTest extends TestCase
         self::assertSame('<p>ok</p>', $clean);
     }
 
+    public function testHtmlCommentsAreDroppedSoCommentBoundaryMxssCannotSmuggleLiveMarkup(): void
+    {
+        // libxml (this parser) and the browser's HTML5 tokenizer disagree on
+        // where a comment ends; passing comments through verbatim let an
+        // abrupt-close payload reintroduce an executing element on PHP <=8.3.
+        // Comments are now removed outright, so nothing survives re-parsing.
+        $clean = $this->sanitizer->sanitize('<p>Beautiful.</p><!--><img src=x onerror=alert(1)>-->');
+
+        self::assertStringNotContainsString('<img', $clean);
+        self::assertStringNotContainsString('onerror', $clean);
+        self::assertStringNotContainsString('<!--', $clean);
+
+        self::assertSame('', $this->sanitizer->sanitize('<!---><svg onload=alert(1)>-->'));
+        self::assertSame('<p>ab</p>', $this->sanitizer->sanitize('<p>a<!--[if]><img src=x onerror=alert(1)>-->b</p>'));
+    }
+
     public function testUnknownElementsAreUnwrappedToTheirText(): void
     {
         $clean = $this->sanitizer->sanitize('<div class="x"><p>kept <span style="color:red">text</span></p></div>');

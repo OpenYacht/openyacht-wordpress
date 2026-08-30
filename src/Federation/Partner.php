@@ -56,6 +56,19 @@ final class Partner
     }
 
     /**
+     * The key_id the partner signs with now: the first key in its
+     * well-known document, by both implementations' convention. This is the
+     * key the TOFU pin is armed to (FP-12). Ingest binds each key_id to its
+     * material, so a first-listed key_id is a commitment to a real key.
+     */
+    public function currentSigningKeyId(): ?string
+    {
+        $first = $this->keysJson[0] ?? null;
+
+        return is_array($first) && is_string($first['key_id'] ?? null) ? $first['key_id'] : null;
+    }
+
+    /**
      * The field groups granted to this partner (LS-14). A null column
      * means every group is granted; an explicit array restricts to those
      * groups.

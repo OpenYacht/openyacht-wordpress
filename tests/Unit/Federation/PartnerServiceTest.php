@@ -65,6 +65,35 @@ final class PartnerServiceTest extends TestCase
         self::assertCount(1, $partner->publishedKeys());
     }
 
+    #[Group('FP-12')]
+    public function testTofuAddArmsThePinToTheCurrentSigningKey(): void
+    {
+        // Without an armed pin, whoever controls a verified partner's
+        // well-known document can silently rotate to attacker keys and the
+        // verifier's pin check is dead code. First contact must pin.
+        $partner = $this->service($this->wellKnown())->add('broker.example');
+
+        self::assertSame(str_repeat('a', 16), $partner->pinnedKeyId);
+    }
+
+    #[Group('FP-12')]
+    public function testApproveEstablishesThePinForAPartnerThatPredatesPinArming(): void
+    {
+        Functions\when('do_action')->justReturn(null);
+        $service = $this->service($this->wellKnown());
+        $partner = $this->partners->insert([
+            'domain' => 'broker.example',
+            'node_uuid' => 'aaaaaaaa-1111-2222-3333-444444444444',
+            'keys_json' => [['key_id' => str_repeat('c', 16), 'algorithm' => 'ed25519', 'public_key' => base64_encode(random_bytes(32))]],
+            'trust_level' => TrustLevel::Provisional,
+            'pinned_key_id' => null,
+        ]);
+
+        $approved = $service->approve($partner, 3);
+
+        self::assertSame(str_repeat('c', 16), $approved->pinnedKeyId, 'approval pins a partner created before pin-arming');
+    }
+
     public function testAddRefusesADuplicateDomain(): void
     {
         $service = $this->service($this->wellKnown());

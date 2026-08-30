@@ -7,6 +7,7 @@ namespace OpenYacht\Federation;
 use DOMDocument;
 use DOMElement;
 use DOMNode;
+use DOMText;
 
 /**
  * Sanitises rich text to the wire schema's restricted HTML subset before
@@ -78,7 +79,18 @@ class RichTextSanitizer
     {
         // Iterate over a static list: sanitising mutates the live child list.
         foreach (iterator_to_array($node->childNodes) as $child) {
+            // Plain text is safe — saveHTML() escapes it. Everything else
+            // that is not an element (comments, processing instructions,
+            // CDATA) is dropped rather than passed through: this parser is
+            // libxml (HTML4) while browsers tokenise as HTML5, and the two
+            // disagree on where a comment ends. Re-serialising a comment
+            // verbatim lets `<!--><img onerror=…>-->` smuggle a live element
+            // past the allow-list on some PHP versions (mXSS).
             if (! $child instanceof DOMElement) {
+                if (! $child instanceof DOMText) {
+                    $node->removeChild($child);
+                }
+
                 continue;
             }
 

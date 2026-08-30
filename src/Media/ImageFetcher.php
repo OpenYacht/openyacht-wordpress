@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace OpenYacht\Media;
 
+use OpenYacht\Federation\BlockedOutboundHost;
+use OpenYacht\Federation\OutboundUrlGuard;
+
 /**
  * Downloads a partner-referenced image under the FP-14 rules: HTTPS only,
  * the response must be an image, size-capped, and verified against the
@@ -16,6 +19,10 @@ class ImageFetcher
 {
     public const MAX_BYTES = 30 * 1024 * 1024;
 
+    public function __construct(private readonly OutboundUrlGuard $guard = new OutboundUrlGuard())
+    {
+    }
+
     /**
      * @return string the image bytes
      *
@@ -23,13 +30,20 @@ class ImageFetcher
      */
     public function fetch(string $url, ?string $expectedSha256 = null): string
     {
-        if (! str_starts_with(strtolower($url), 'https://')) {
-            throw new MediaFetchException("Refusing non-HTTPS media URL [{$url}].");
+        // The media URL comes straight from the partner's payload, so it is
+        // untrusted: require a plain https URL to a public host (SSRF) and
+        // never follow a redirect that could bounce to a private host or
+        // plain HTTP (FP-14).
+        try {
+            $this->guard->assertPublicHttpsUrl($url);
+        } catch (BlockedOutboundHost $e) {
+            throw new MediaFetchException("Refusing media URL [{$url}]: " . $e->getMessage(), 0, $e);
         }
 
         $response = wp_remote_get($url, [
             'timeout' => 60,
             'sslverify' => true,
+            'redirection' => 0,
             'limit_response_size' => self::MAX_BYTES + 1,
         ]);
 

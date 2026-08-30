@@ -15,8 +15,10 @@ namespace OpenYacht\Federation;
  */
 final class SignedClient implements FederationClient
 {
-    public function __construct(private readonly Signer $signer)
-    {
+    public function __construct(
+        private readonly Signer $signer,
+        private readonly OutboundUrlGuard $guard = new OutboundUrlGuard(),
+    ) {
     }
 
     public function get(Partner $partner, string $pathWithQuery): HttpResponse
@@ -33,6 +35,20 @@ final class SignedClient implements FederationClient
 
     private function send(Partner $partner, string $method, string $pathWithQuery, ?string $rawBody): HttpResponse
     {
+        // The partner domain is stored from its (untrusted) discovery
+        // document, so guard it against SSRF before connecting and never
+        // follow a redirect that could bounce to a private host or plain
+        // HTTP (FP-2, FP-14).
+        try {
+            $this->guard->assertPublicHost($partner->domain);
+        } catch (BlockedOutboundHost $e) {
+            throw new TransportException(
+                "Refusing request to {$partner->domain}{$pathWithQuery}: " . $e->getMessage(),
+                0,
+                $e,
+            );
+        }
+
         $headers = $this->signer->headers($method, $pathWithQuery, $partner->domain, $rawBody ?? '');
 
         if ($rawBody !== null) {
@@ -43,6 +59,7 @@ final class SignedClient implements FederationClient
             'method' => $method,
             'timeout' => 30,
             'sslverify' => true,
+            'redirection' => 0,
             'headers' => $headers,
             'body' => $rawBody,
         ]);

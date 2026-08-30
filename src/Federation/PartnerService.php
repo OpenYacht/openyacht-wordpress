@@ -34,11 +34,20 @@ final class PartnerService
         $document = $this->wellKnown->fetch($domain);
         $now = gmdate('Y-m-d H:i:s');
 
+        // Arm the trust-on-first-use pin to the key the partner signs with
+        // now (FP-12). Until an administrator confirms a rotation, this is
+        // the only key the verifier will accept — so a later silent key
+        // swap by whoever controls the partner's well-known document is
+        // rejected, not trusted. Ingest has bound the key_id to its
+        // material, so the first-listed id is a commitment to a real key.
+        $firstKeyId = is_string($document['keys'][0]['key_id'] ?? null) ? $document['keys'][0]['key_id'] : null;
+
         $partner = $this->partners->insert([
             'domain' => $domain,
             'node_uuid' => $document['node']['uuid'] ?? null,
             'keys_json' => $document['keys'],
             'keys_fetched_at' => $now,
+            'pinned_key_id' => $firstKeyId,
             'trust_level' => TrustLevel::Provisional,
             'last_ok_at' => $now,
         ]);
@@ -157,6 +166,9 @@ final class PartnerService
         $this->partners->update($partner->id, [
             'trust_level' => TrustLevel::Verified,
             'approved_by_user_id' => $approvedByUserId,
+            // Establish the pin if a partner predates pin-arming at first
+            // contact; approval is the human "I trust this partner" moment.
+            'pinned_key_id' => $partner->pinnedKeyId ?? $partner->currentSigningKeyId(),
         ]);
 
         $this->logger->log('partner', "Partner {$partner->domain} approved", 'partner_approved', $partner->id);
