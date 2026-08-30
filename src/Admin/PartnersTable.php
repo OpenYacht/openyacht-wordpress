@@ -104,6 +104,11 @@ final class PartnersTable extends \WP_List_Table
                 $granted,
                 $total,
             );
+
+        if ($item->sharingScope === \OpenYacht\Federation\SharingScope::Curated) {
+            $label = __('Curated', 'openyacht') . ' · ' . $label;
+        }
+
         $url = add_query_arg(
             ['page' => PartnersPage::MENU_SLUG, 'action' => 'grants', 'domain' => $item->domain],
             admin_url('admin.php'),

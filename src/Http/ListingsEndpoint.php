@@ -57,7 +57,7 @@ final class ListingsEndpoint
         }
 
         $cursor = ListingCursor::decode(isset($query['cursor']) ? (string) $query['cursor'] : null);
-        $rows = $this->listings->feedPage($partner->id, $updatedSinceStored, $cursor, $pageSize);
+        $rows = $this->listings->feedPage($partner->id, $partner->sharingScope, $updatedSinceStored, $cursor, $pageSize);
         $hasMore = count($rows) > $pageSize;
         $page = array_slice($rows, 0, $pageSize);
 
@@ -115,7 +115,7 @@ final class ListingsEndpoint
         // same response as for a listing that does not exist (no leak).
         if ($listing === null
             || $listing->status === ListingStatus::Draft
-            || ! $this->sharing->isVisibleTo($listing, $partner->id)) {
+            || ! $this->sharing->isVisibleTo($listing, $partner)) {
             return ['error' => ErrorCode::NotFound, 'message' => 'No such listing.'];
         }
 

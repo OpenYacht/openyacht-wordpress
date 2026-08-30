@@ -33,6 +33,7 @@ final class Partner
         public readonly int $consecutiveFailures,
         public readonly ?string $lastSyncedAt,
         public readonly ?string $lastAttemptedAt,
+        public readonly SharingScope $sharingScope = SharingScope::Standard,
     ) {
     }
 

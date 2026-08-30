@@ -172,8 +172,8 @@ final class SharingFeedTest extends TestCase
 
         self::assertCount(0, $this->feed($this->partnerA));
         self::assertCount(1, $this->feed($this->partnerB));
-        self::assertFalse($this->sharing->isVisibleTo($this->listings->find($listing->id), $this->partnerA->id));
-        self::assertTrue($this->sharing->isVisibleTo($this->listings->find($listing->id), $this->partnerB->id));
+        self::assertFalse($this->sharing->isVisibleTo($this->listings->find($listing->id), $this->partnerA));
+        self::assertTrue($this->sharing->isVisibleTo($this->listings->find($listing->id), $this->partnerB));
     }
 
     public function testHiddenListingDereferencesAsNotFound(): void
@@ -226,7 +226,7 @@ final class SharingFeedTest extends TestCase
 
         self::assertCount(1, $this->feed($this->partnerA), 'group member receives the listing');
         self::assertCount(0, $this->feed($this->partnerB), 'non-member does not');
-        self::assertTrue($this->sharing->isVisibleTo($this->listings->find($listing->id), $this->partnerA->id));
+        self::assertTrue($this->sharing->isVisibleTo($this->listings->find($listing->id), $this->partnerA));
     }
 
     public function testAddingAPartnerToASelectedGroupSurfacesEveryListingSelectingIt(): void

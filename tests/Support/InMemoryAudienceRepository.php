@@ -16,6 +16,19 @@ final class InMemoryAudienceRepository implements AudienceRepository
         return $this->selected[$listingId] ?? [];
     }
 
+    public function listingIdsForPartner(int $partnerId): array
+    {
+        $ids = [];
+
+        foreach ($this->selected as $listingId => $partnerIds) {
+            if (in_array($partnerId, $partnerIds, true)) {
+                $ids[] = $listingId;
+            }
+        }
+
+        return $ids;
+    }
+
     public function replaceForListing(int $listingId, array $partnerIds): void
     {
         $this->selected[$listingId] = array_values(array_unique(array_map('intval', $partnerIds)));

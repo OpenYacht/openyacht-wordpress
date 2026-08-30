@@ -6,6 +6,7 @@ namespace OpenYacht\Tests\Support;
 
 use OpenYacht\Federation\Partner;
 use OpenYacht\Federation\PartnerRepository;
+use OpenYacht\Federation\SharingScope;
 use OpenYacht\Federation\TrustLevel;
 
 final class InMemoryPartnerRepository implements PartnerRepository
@@ -78,6 +79,7 @@ final class InMemoryPartnerRepository implements PartnerRepository
     private function buildPartner(int $id, array $columns): Partner
     {
         $trust = $columns['trust_level'] ?? TrustLevel::Provisional;
+        $scope = $columns['sharing_scope'] ?? SharingScope::Standard;
 
         return new Partner(
             id: $id,
@@ -95,6 +97,7 @@ final class InMemoryPartnerRepository implements PartnerRepository
             consecutiveFailures: (int) ($columns['consecutive_failures'] ?? 0),
             lastSyncedAt: $columns['last_synced_at'] ?? null,
             lastAttemptedAt: $columns['last_attempted_at'] ?? null,
+            sharingScope: $scope instanceof SharingScope ? $scope : (SharingScope::tryFrom((string) $scope) ?? SharingScope::Standard),
         );
     }
 
@@ -116,6 +119,7 @@ final class InMemoryPartnerRepository implements PartnerRepository
             'consecutive_failures' => $partner->consecutiveFailures,
             'last_synced_at' => $partner->lastSyncedAt,
             'last_attempted_at' => $partner->lastAttemptedAt,
+            'sharing_scope' => $partner->sharingScope,
         ];
     }
 }

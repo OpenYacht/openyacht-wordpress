@@ -102,6 +102,10 @@ final class WpdbPartnerRepository implements PartnerRepository
             $columns['trust_level'] = $columns['trust_level']->value;
         }
 
+        if (array_key_exists('sharing_scope', $columns) && $columns['sharing_scope'] instanceof SharingScope) {
+            $columns['sharing_scope'] = $columns['sharing_scope']->value;
+        }
+
         return $columns;
     }
 
@@ -129,6 +133,7 @@ final class WpdbPartnerRepository implements PartnerRepository
             consecutiveFailures: (int) ($row['consecutive_failures'] ?? 0),
             lastSyncedAt: $row['last_synced_at'] ?? null,
             lastAttemptedAt: $row['last_attempted_at'] ?? null,
+            sharingScope: SharingScope::tryFrom((string) ($row['sharing_scope'] ?? '')) ?? SharingScope::Standard,
         );
     }
 

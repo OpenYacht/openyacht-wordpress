@@ -63,7 +63,7 @@ final class InMemoryListingRepository implements ListingRepository
         $this->listings[$id] = $this->build($id, $columns + $this->toColumns($existing));
     }
 
-    public function feedPage(int $partnerId, ?string $updatedSinceStored, ?array $cursor, int $limit): array
+    public function feedPage(int $partnerId, \OpenYacht\Federation\SharingScope $scope, ?string $updatedSinceStored, ?array $cursor, int $limit): array
     {
         $latest = $this->events?->latestForPartner($partnerId) ?? [];
         $items = [];
@@ -73,15 +73,15 @@ final class InMemoryListingRepository implements ListingRepository
                 continue;
             }
 
-            $visible = match ($listing->audience) {
-                \OpenYacht\Federation\Audience::Everyone => true,
-                \OpenYacht\Federation\Audience::None => false,
-                \OpenYacht\Federation\Audience::Selected => in_array($partnerId, $this->audience?->partnersForListing($listing->id) ?? [], true)
-                    || array_intersect(
-                        $this->groups?->groupIdsForListing($listing->id) ?? [],
-                        $this->groups?->groupIdsForPartner($partnerId) ?? [],
-                    ) !== [],
-            };
+            // Mirrors WpdbListingRepository::feedPage(): additive pivots,
+            // everyone arm for standard scope only.
+            $pivot = in_array($partnerId, $this->audience?->partnersForListing($listing->id) ?? [], true)
+                || array_intersect(
+                    $this->groups?->groupIdsForListing($listing->id) ?? [],
+                    $this->groups?->groupIdsForPartner($partnerId) ?? [],
+                ) !== [];
+            $visible = $listing->audience !== \OpenYacht\Federation\Audience::None
+                && ($pivot || ($listing->audience === \OpenYacht\Federation\Audience::Everyone && $scope === \OpenYacht\Federation\SharingScope::Standard));
             $event = $latest[$listing->id] ?? null;
             $effective = max((string) $listing->federationUpdatedAt, $event['occurred_at'] ?? '');
 

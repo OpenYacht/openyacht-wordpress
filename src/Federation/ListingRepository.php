@@ -44,10 +44,15 @@ interface ListingRepository
      *
      * Returns up to $limit + 1 rows so the caller can detect a next page.
      *
+     * $scope is the requesting partner's sharing scope: for a curated
+     * partner the everyone-audience arm of the visibility rule drops out,
+     * so only explicitly-pivoted listings serve (the predicate must stay
+     * in exact agreement with SharingService::isVisibleTo()).
+     *
      * @param array{updated_at: string, id: int}|null $cursor stored-format position
      * @return list<FeedItem>
      */
-    public function feedPage(int $partnerId, ?string $updatedSinceStored, ?array $cursor, int $limit): array;
+    public function feedPage(int $partnerId, SharingScope $scope, ?string $updatedSinceStored, ?array $cursor, int $limit): array;
 
     public function countAll(): int;
 

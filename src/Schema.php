@@ -13,7 +13,7 @@ namespace OpenYacht;
  */
 final class Schema
 {
-    public const VERSION = 7;
+    public const VERSION = 8;
 
     public const OPTION = 'openyacht_schema_version';
 
@@ -161,6 +161,7 @@ final class Schema
   keys_fetched_at datetime NULL,
   pinned_key_id char(16) NULL,
   trust_level varchar(16) NOT NULL DEFAULT 'provisional',
+  sharing_scope varchar(16) NOT NULL DEFAULT 'standard',
   field_groups longtext NULL,
   approved_by_user_id bigint(20) unsigned NULL,
   last_ok_at datetime NULL,

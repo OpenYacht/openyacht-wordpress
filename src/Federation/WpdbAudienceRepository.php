@@ -22,6 +22,16 @@ final class WpdbAudienceRepository implements AudienceRepository
         return array_map('intval', is_array($ids) ? $ids : []);
     }
 
+    public function listingIdsForPartner(int $partnerId): array
+    {
+        $ids = $this->wpdb->get_col($this->wpdb->prepare(
+            "SELECT listing_id FROM {$this->table()} WHERE partner_id = %d",
+            $partnerId,
+        ));
+
+        return array_map('intval', is_array($ids) ? $ids : []);
+    }
+
     public function replaceForListing(int $listingId, array $partnerIds): void
     {
         $this->wpdb->query($this->wpdb->prepare(

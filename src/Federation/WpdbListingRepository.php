@@ -70,7 +70,7 @@ final class WpdbListingRepository implements ListingRepository
         );
     }
 
-    public function feedPage(int $partnerId, ?string $updatedSinceStored, ?array $cursor, int $limit): array
+    public function feedPage(int $partnerId, SharingScope $scope, ?string $updatedSinceStored, ?array $cursor, int $limit): array
     {
         $schema = new Schema($this->wpdb);
         $events = $schema->tableName('visibility_events');
@@ -78,16 +78,20 @@ final class WpdbListingRepository implements ListingRepository
         $audienceGroups = $schema->tableName('listing_audience_groups');
         $groupMembers = $schema->tableName('partner_group_members');
 
-        // A selected audience is the union of individually selected
-        // partners and members of selected groups — this must mirror
-        // SharingService::isVisibleTo() exactly.
+        // Explicit pivots (individually selected partners, members of
+        // selected groups) are additive: they grant visibility under any
+        // audience except 'none'. The everyone arm only serves standard-
+        // scope partners; a curated partner sees pivot matches alone.
+        // This must mirror SharingService::isVisibleTo() exactly.
         $visible = $this->wpdb->prepare(
-            "(l.audience = 'everyone' OR (l.audience = 'selected' AND ("
+            "(l.audience != 'none' AND ("
             . "EXISTS (SELECT 1 FROM {$audience} a WHERE a.listing_id = l.id AND a.partner_id = %d)"
             . " OR EXISTS (SELECT 1 FROM {$audienceGroups} ag INNER JOIN {$groupMembers} gm ON gm.group_id = ag.group_id WHERE ag.listing_id = l.id AND gm.partner_id = %d)"
-            . ')))',
+            . " OR (l.audience = 'everyone' AND %s = 'standard')"
+            . '))',
             $partnerId,
             $partnerId,
+            $scope->value,
         );
         $effective = "GREATEST(COALESCE(l.federation_updated_at, l.created_at), COALESCE(ev.occurred_at, '1000-01-01 00:00:00'))";
 

@@ -104,6 +104,39 @@ final class PartnersPage
                     Services::sharingService()->refreshPartnerFeed($partner->id, "grants changed for {$partner->domain}");
                     $notice = 'grants';
                     break;
+                case 'scope':
+                    $partner = Services::partners()->findByDomain($domain);
+                    $scope = \OpenYacht\Federation\SharingScope::tryFrom(
+                        isset($_POST['sharing_scope']) ? sanitize_key(wp_unslash($_POST['sharing_scope'])) : '',
+                    );
+
+                    if ($partner === null || $scope === null) {
+                        break;
+                    }
+
+                    // The flip replays through the visibility event log:
+                    // standard -> curated tombstones everyone-only listings,
+                    // curated -> standard resurfaces them. No wire timestamp
+                    // moves.
+                    Services::sharingService()->setSharingScope($partner, $scope);
+                    $notice = 'scope_saved';
+                    break;
+                case 'shares':
+                    $partner = Services::partners()->findByDomain($domain);
+                    $type = isset($_POST['share_type']) ? sanitize_key(wp_unslash($_POST['share_type'])) : '';
+
+                    if ($partner === null || ! in_array($type, ['sale', 'charter'], true)) {
+                        break;
+                    }
+
+                    $listingIds = array_map('intval', isset($_POST['listing_ids']) && is_array($_POST['listing_ids']) ? wp_unslash($_POST['listing_ids']) : []);
+                    // Each picker submits ONE type's full direct-share list;
+                    // the replace is scoped to that type, so saving the sale
+                    // picker can never unshare charter listings it never
+                    // showed (and vice versa).
+                    Services::sharingService()->replaceDirectShares($partner, $type, $listingIds);
+                    $notice = 'shares_saved';
+                    break;
                 case 'directory_refresh':
                     $count = Services::nodeDirectoryIndex()->refresh();
                     Services::logger()->log('partner', "Node directory refreshed: {$count} entries", 'directory_refreshed');
@@ -197,7 +230,9 @@ final class PartnersPage
         // Approval is the moment the partner starts receiving listings, so
         // land on its sharing screen — grants default to everything, and
         // this is where that decision should be looked at, not discovered.
-        $args = $notice === 'approved'
+        // Scope and shared-listings saves land back there too: they are
+        // that screen's own forms.
+        $args = in_array($notice, ['approved', 'scope_saved', 'shares_saved'], true)
             ? ['page' => self::MENU_SLUG, 'action' => 'grants', 'domain' => $domain, 'openyacht_notice' => $notice]
             : ['page' => self::MENU_SLUG, 'openyacht_notice' => $notice] + $syncCounts;
 
@@ -248,6 +283,8 @@ final class PartnersPage
             'group_saved' => __('Group saved. Joined partners pick up its listings on their next poll; removed partners receive tombstones.', 'openyacht'),
             'directory_refreshed' => __('Node directory refreshed from openyacht.org.', 'openyacht'),
             'group_deleted' => __('Group deleted. Listings that shared only through it were tombstoned for its members.', 'openyacht'),
+            'scope_saved' => __('Sharing scope saved. Visibility changes reach the partner on its next poll — removed listings tombstone, added ones surface.', 'openyacht'),
+            'shares_saved' => __('Shared listings saved. Changes reach the partner on its next poll.', 'openyacht'),
         ];
 
         if (isset($messages[$notice])) {
@@ -460,6 +497,205 @@ final class PartnersPage
         echo '</fieldset></td></tr></table>';
         submit_button(__('Save sharing rules', 'openyacht'));
         echo '</form>';
+
+        $this->renderScopeForm($partner);
+        $this->renderSharedListings($partner);
+    }
+
+    /**
+     * The partner's sharing scope: standard (today's behaviour) or
+     * curated — a partner that receives ONLY listings explicitly selected
+     * for it, directly or via a group. Explicit selections are additive,
+     * so curating this partner never changes what any other partner sees.
+     */
+    private function renderScopeForm(\OpenYacht\Federation\Partner $partner): void
+    {
+        $labels = [
+            'standard' => __('Standard — receives every listing shared with everyone, plus anything selected for it', 'openyacht'),
+            'curated' => __('Curated — receives only listings explicitly selected for it (a yacht-show organiser, a trial, a press feed); saving this shows the listing picker', 'openyacht'),
+        ];
+
+        echo '<hr style="margin:2em 0;">';
+        echo '<h2>' . esc_html__('Sharing scope', 'openyacht') . '</h2>';
+        echo '<p class="description" style="max-width:640px;">' . esc_html__('Switching to curated tombstones every listing this partner saw only because it was shared with everyone; switching back resurfaces them. Listings selected for it are unaffected either way.', 'openyacht') . '</p>';
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+        echo '<input type="hidden" name="action" value="' . esc_attr(self::ACTION) . '">';
+        echo '<input type="hidden" name="op" value="scope">';
+        echo '<input type="hidden" name="domain" value="' . esc_attr($partner->domain) . '">';
+        wp_nonce_field(self::ACTION);
+        echo '<fieldset>';
+        echo '<legend class="screen-reader-text">' . esc_html__('Sharing scope', 'openyacht') . '</legend>';
+
+        foreach (\OpenYacht\Federation\SharingScope::cases() as $scope) {
+            printf(
+                '<label style="display:block;margin-bottom:4px;"><input type="radio" name="sharing_scope" value="%s" %s> %s</label>',
+                esc_attr($scope->value),
+                checked($partner->sharingScope->value, $scope->value, false),
+                esc_html($labels[$scope->value] ?? $scope->value),
+            );
+        }
+
+        echo '</fieldset>';
+        submit_button(__('Save sharing scope', 'openyacht'), 'secondary');
+        echo '</form>';
+    }
+
+    /**
+     * The partner-side transpose of the listing editor's audience picker:
+     * this partner's direct shares, one picker per listing type — sale
+     * and charter are never mixed in one list, because the twins carry
+     * different price information and sharing the wrong one leaks the
+     * wrong price. Each form submits its type's FULL direct-share list
+     * and the save is scoped to that type, so saving one list cannot
+     * unshare the other. Group-derived shares render read-only with
+     * their provenance; unticking a direct share never touches group
+     * membership.
+     *
+     * Curated partners only: for a standard partner the list would
+     * mislead — everything shared with everyone is visible regardless of
+     * the checkboxes (selections only matter on selected-audience
+     * listings, managed from each listing's own Sharing section). Any
+     * existing selections are noted, never silently hidden: they stay in
+     * place and apply the moment the scope flips.
+     */
+    private function renderSharedListings(\OpenYacht\Federation\Partner $partner): void
+    {
+        $directIds = Services::audience()->listingIdsForPartner($partner->id);
+
+        if ($partner->sharingScope !== \OpenYacht\Federation\SharingScope::Curated) {
+            if ($directIds !== []) {
+                echo '<p class="description" style="max-width:640px;">' . esc_html(sprintf(
+                    /* translators: %d: number of listings individually selected for this partner. */
+                    _n(
+                        'This partner has %d listing individually selected for it. The selection stays in place and is what it will receive if its scope is switched to curated.',
+                        'This partner has %d listings individually selected for it. The selection stays in place and is what it will receive if its scope is switched to curated.',
+                        count($directIds),
+                        'openyacht',
+                    ),
+                    count($directIds),
+                )) . '</p>';
+            }
+
+            return;
+        }
+
+        $groups = Services::partnerGroups();
+        $partnerGroupIds = $groups->groupIdsForPartner($partner->id);
+        $groupNames = [];
+
+        foreach ($groups->all() as $group) {
+            $groupNames[$group->id] = $group->name;
+        }
+
+        $byType = ['sale' => [], 'charter' => []];
+        $sharedNamesByType = ['sale' => [], 'charter' => []];
+        $namesByType = ['sale' => [], 'charter' => []];
+
+        foreach (Services::listings()->all() as $listing) {
+            if (! isset($byType[$listing->type])) {
+                continue;
+            }
+
+            $viaGroups = array_intersect($groups->groupIdsForListing($listing->id), $partnerGroupIds);
+            $shared = in_array($listing->id, $directIds, true) || $viaGroups !== [];
+            $byType[$listing->type][] = ['listing' => $listing, 'viaGroups' => array_values($viaGroups), 'shared' => $shared];
+
+            if ($listing->name !== null) {
+                $namesByType[$listing->type][$listing->name] = true;
+
+                if ($shared) {
+                    $sharedNamesByType[$listing->type][$listing->name] = true;
+                }
+            }
+        }
+
+        echo '<hr style="margin:2em 0;">';
+        echo '<h2>' . esc_html__('Shared listings', 'openyacht') . '</h2>';
+        echo '<p class="description" style="max-width:640px;">' . esc_html__('Listings explicitly selected for this partner. Selections are additive — they share the listing with this partner under any audience except "no one" — and they are what a curated partner\'s feed is built from. A share the partner gets via a group is shown with its provenance and is managed on the group, not here.', 'openyacht') . '</p>';
+
+        $headings = ['sale' => __('Sale listings', 'openyacht'), 'charter' => __('Charter listings', 'openyacht')];
+
+        foreach ($headings as $type => $heading) {
+            $sisterType = $type === 'sale' ? 'charter' : 'sale';
+            echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" style="margin:12px 0;padding:12px;border:1px solid #c3c4c7;background:#fff;max-width:640px;">';
+            echo '<input type="hidden" name="action" value="' . esc_attr(self::ACTION) . '">';
+            echo '<input type="hidden" name="op" value="shares">';
+            echo '<input type="hidden" name="domain" value="' . esc_attr($partner->domain) . '">';
+            echo '<input type="hidden" name="share_type" value="' . esc_attr($type) . '">';
+            wp_nonce_field(self::ACTION);
+            echo '<h3 style="margin-top:0;">' . esc_html($heading) . '</h3>';
+
+            if ($byType[$type] === []) {
+                echo '<p>' . esc_html__('No listings of this type yet.', 'openyacht') . '</p>';
+                echo '</form>';
+                continue;
+            }
+
+            echo '<p><label><input type="checkbox" data-oy-toggle-shares> ' . esc_html__('Select all', 'openyacht') . '</label></p>';
+            echo '<fieldset style="max-height:320px;overflow-y:auto;border-top:1px solid #dcdcde;padding-top:8px;">';
+            echo '<legend class="screen-reader-text">' . esc_html($heading) . '</legend>';
+
+            foreach ($byType[$type] as $row) {
+                $listing = $row['listing'];
+                $notes = [];
+
+                if ($listing->status !== \OpenYacht\Federation\ListingStatus::Active) {
+                    $notes[] = $listing->status->value;
+                }
+
+                if ($listing->audience === \OpenYacht\Federation\Audience::None) {
+                    $notes[] = __('audience: no one — hidden from all partners until re-shared', 'openyacht');
+                }
+
+                if ($row['viaGroups'] !== []) {
+                    $names = array_map(static fn (int $id): string => $groupNames[$id] ?? "#{$id}", $row['viaGroups']);
+                    $notes[] = sprintf(
+                        /* translators: %s: comma-separated partner group names. */
+                        __('shared via %s', 'openyacht'),
+                        implode(', ', $names),
+                    );
+                }
+
+                // The sister-listing hint, keyed on the shared vessel: the
+                // sale/charter twins carry different price information, so
+                // sharing the wrong one leaks the wrong price. A hint, not
+                // an auto-share.
+                if ($row['shared']
+                    && $listing->name !== null
+                    && isset($namesByType[$sisterType][$listing->name])
+                    && ! isset($sharedNamesByType[$sisterType][$listing->name])) {
+                    $notes[] = sprintf(
+                        /* translators: %s: listing type (sale or charter). */
+                        __('its %s twin exists and is not shared — the twins carry different price information', 'openyacht'),
+                        $sisterType,
+                    );
+                }
+
+                printf(
+                    '<label style="display:block;margin-bottom:4px;"><input type="checkbox" name="listing_ids[]" value="%d" %s> %s%s</label>',
+                    $listing->id,
+                    checked(in_array($listing->id, $directIds, true), true, false),
+                    esc_html($listing->name ?? "#{$listing->id}"),
+                    $notes === [] ? '' : ' <span class="description">(' . esc_html(implode('; ', $notes)) . ')</span>',
+                );
+            }
+
+            echo '</fieldset>';
+            submit_button(
+                $type === 'sale' ? __('Save shared sale listings', 'openyacht') : __('Save shared charter listings', 'openyacht'),
+                'secondary',
+                '',
+                true,
+            );
+            echo '</form>';
+        }
+
+        // Select-all toggles only its own picker's checkboxes.
+        echo '<script>document.querySelectorAll("[data-oy-toggle-shares]").forEach(function (toggle) {'
+            . 'toggle.addEventListener("change", function () {'
+            . 'toggle.closest("form").querySelectorAll("input[name=\'listing_ids[]\']").forEach(function (box) { box.checked = toggle.checked; });'
+            . '});'
+            . '});</script>';
     }
 
     private function renderAddForm(): void
