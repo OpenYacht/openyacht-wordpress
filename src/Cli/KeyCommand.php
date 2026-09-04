@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Cli;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use OpenYacht\Federation\FederationKey;
 use OpenYacht\Services;
 use WP_CLI;

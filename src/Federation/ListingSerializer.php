@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Serialises a sale listing to its wire payload for one partner.
  *

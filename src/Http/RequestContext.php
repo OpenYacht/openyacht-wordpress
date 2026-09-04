@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Http;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * The raw inbound request exactly as received: the signing string must be
  * rebuilt from the raw request-target and raw body bytes, never from

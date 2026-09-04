@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Append-only federation log: partner lifecycle events and (later) every
  * inbound request with its verification outcome — the usage-compliance

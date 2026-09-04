@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Admin;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use OpenYacht\Federation\Listing;
 use OpenYacht\Federation\ListingStatus;
 use OpenYacht\Services;
@@ -48,7 +52,7 @@ final class ListingsTable extends \WP_List_Table
      */
     public function column_cb($item): string
     {
-        return '<input type="checkbox" name="ids[]" value="' . (int) $item->id . '">';
+        return sprintf('<input type="checkbox" name="ids[]" value="%d" aria-label="%s">', $item->id, esc_attr($item->name ?? ''));
     }
 
     /**

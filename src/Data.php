@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use OpenYacht\Federation\CopyMedia;
 use OpenYacht\Federation\Listing;
 use OpenYacht\Federation\ListingCopy;

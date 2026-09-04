@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Opaque cursor pagination for /listings (API-2). Keyset-based on
  * (federation_updated_at, id) so concurrent writes never skip or

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Http;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use OpenYacht\Federation\ErrorCode;
 
 /**

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * One row of a partner's updated_since feed: the listing plus its
  * visibility to that partner and the effective change time (the later of

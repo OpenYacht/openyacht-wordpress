@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Append-only per-partner visibility transitions (became-hidden /
  * became-visible). An event log, not a flag: the re-share case — unshare

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Outbound HTTP boundary to a partner's federation API; SignedClient is
  * the wp_remote_* implementation, tests substitute a canned double.

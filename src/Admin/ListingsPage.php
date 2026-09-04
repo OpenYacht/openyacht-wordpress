@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Admin;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use InvalidArgumentException;
 use OpenYacht\Federation\Listing;
 use OpenYacht\Federation\ListingStatus;
@@ -204,7 +208,8 @@ final class ListingsPage
         }
 
         echo '</select>';
-        echo '<input type="search" name="s" placeholder="' . esc_attr__('Search name, builder or model…', 'openyacht') . '" value="' . esc_attr($search) . '">';
+        echo '<label class="screen-reader-text" for="openyacht-listing-search">' . esc_html__('Search listings', 'openyacht') . '</label>';
+        echo '<input type="search" id="openyacht-listing-search" name="s" placeholder="' . esc_attr__('Search name, builder or model…', 'openyacht') . '" value="' . esc_attr($search) . '">';
         submit_button(__('Filter', 'openyacht'), '', '', false);
         echo '</form>';
     }

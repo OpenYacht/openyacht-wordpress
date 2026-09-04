@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Outbound HTTP to a partner's federation API, signed with this node's
  * active key (FP-6). Always HTTPS with strict TLS verification (FP-2).

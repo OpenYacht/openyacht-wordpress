@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 interface CopyMediaRepository
 {
     /** @return list<CopyMedia> ordered by kind then sort */

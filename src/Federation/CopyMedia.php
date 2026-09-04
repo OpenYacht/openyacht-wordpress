@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * One cached media item of a synced copy: its wire identity (source URL +
  * published sha256) and the locally generated renditions.

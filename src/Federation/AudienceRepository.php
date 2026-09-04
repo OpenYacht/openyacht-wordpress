@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * The explicitly-selected-partners set per listing. Pivot rows are
  * additive: they grant visibility under any audience except 'none', so

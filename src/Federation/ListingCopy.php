@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * A synced copy of a partner's listing, stored verbatim with the mandatory
  * provenance fields (ID-3) and never substantively modified (ID-5).

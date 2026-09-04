@@ -22,6 +22,12 @@ if [[ "$CONST_VERSION" != "$VERSION" ]]; then
     exit 1
 fi
 
+STABLE_TAG="$(sed -n 's/^Stable tag: *\(.*\)$/\1/p' "$PLUGIN_DIR/readme.txt" | tr -d '\r')"
+if [[ "$STABLE_TAG" != "$VERSION" ]]; then
+    echo "readme.txt Stable tag ($STABLE_TAG) and Version header ($VERSION) disagree — fix before building" >&2
+    exit 1
+fi
+
 OUT_ZIP="$(dirname "$PLUGIN_DIR")/openyacht-$VERSION.zip"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
@@ -52,7 +58,12 @@ echo "Installing production dependencies ..."
 composer install \
     --working-dir="$STAGE/openyacht" \
     --no-dev --optimize-autoloader --no-interaction --quiet
-rm -f "$STAGE/openyacht/composer.lock"
+# composer.json only exists to drive the install above; it and the
+# dependencies' docs are not runtime files. Package LICENSE/NOTICE files stay.
+rm -f "$STAGE/openyacht/composer.json" "$STAGE/openyacht/composer.lock"
+find "$STAGE/openyacht/vendor" -type f \
+    \( -name 'README.md' -o -name 'CHANGELOG.md' -o -name 'SECURITY.md' -o -name 'composer.json' -o -name '.editorconfig' \) \
+    -delete
 
 echo "Zipping ..."
 rm -f "$OUT_ZIP"

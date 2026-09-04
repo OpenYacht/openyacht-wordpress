@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use OpenYacht\Federation\Partner;
 use OpenYacht\Federation\SyncResult;
 use Throwable;

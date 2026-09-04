@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Admin;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use OpenYacht\Data;
 use OpenYacht\Federation\ListingCopy;
 use OpenYacht\Media\MediaPolicy;
@@ -253,7 +257,8 @@ final class SyncedListingsPage
         }
 
         echo '</select>';
-        echo '<input type="search" name="s" placeholder="' . esc_attr__('Search name or builder…', 'openyacht') . '" value="' . esc_attr($search) . '">';
+        echo '<label class="screen-reader-text" for="openyacht-copy-search">' . esc_html__('Search synced listings', 'openyacht') . '</label>';
+        echo '<input type="search" id="openyacht-copy-search" name="s" placeholder="' . esc_attr__('Search name or builder…', 'openyacht') . '" value="' . esc_attr($search) . '">';
         submit_button(__('Filter', 'openyacht'), '', '', false);
         echo '</form>';
     }

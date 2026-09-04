@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Media;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Storage boundary for cached partner media. Synced images are cache, not
  * content: the plugin must refresh, replace, and delete them unilaterally

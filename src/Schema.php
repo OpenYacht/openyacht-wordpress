@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Owns every plugin table definition and the versioned migration runner.
  *

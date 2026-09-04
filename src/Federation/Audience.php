@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Per-listing audience control: who a listing is shared with. Display and
  * sharing are orthogonal — a listing shared with no one is still

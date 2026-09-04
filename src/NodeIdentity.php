@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * The node UUID, minted once at installation and published in the
  * well-known document (FP-5). A changed UUID signals a different node to

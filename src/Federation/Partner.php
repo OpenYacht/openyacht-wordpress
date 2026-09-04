@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * A federation partner: another OpenYacht node this node exchanges
  * listings with. Identity is the domain; the node UUID exists to detect

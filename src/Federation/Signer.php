@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use DateTimeImmutable;
 use DateTimeZone;
 use RuntimeException;

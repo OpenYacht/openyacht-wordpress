@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Runtime-floor checks: without sodium or TLS the plugin cannot run as a
  * conformant node (FP-2, FP-3), so activation refuses rather than degrades.

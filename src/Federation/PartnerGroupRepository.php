@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Node-defined partner groups, their membership, and the per-listing
  * selected-groups set that composes with the selected-partners set.

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Append-only price history (LS-10): most-recent-first, first entry equals
  * the current price. Rows are never rewritten.

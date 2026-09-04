@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Admin;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * One option, one declarative field schema. fields() is the single source
  * of truth for registration, rendering, defaults, and sanitisation — never

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * SSRF guard for every server-side federation fetch (well-known discovery,
  * signed sync, media import). A federation host arrives from an

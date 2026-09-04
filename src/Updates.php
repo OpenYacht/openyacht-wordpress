@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Self-hosted plugin updates off public GitHub releases — the plugin is not
  * distributed through wordpress.org. The main file's Update URI header opts
@@ -14,6 +18,11 @@ namespace OpenYacht;
  * The release contract: a published (non-draft, non-prerelease) GitHub
  * release whose tag is the plugin version (optionally v-prefixed) carrying
  * an asset named openyacht-{version}.zip — exactly what bin/build.sh emits.
+ *
+ * The icon and banner core shows on the Updates screen and in the "View
+ * details" modal ship inside the plugin (assets/brand/, copies of the
+ * masters at https://openyacht.org/brand/), so wp-admin never fetches them
+ * from a third party.
  */
 final class Updates
 {
@@ -68,6 +77,8 @@ final class Updates
             'package'      => $release['package'],
             'requires'     => '6.4',
             'requires_php' => '8.1',
+            'icons'        => self::icons(),
+            'banners'      => self::banners(),
         ];
     }
 
@@ -92,11 +103,36 @@ final class Updates
             'requires_php'  => '8.1',
             'download_link' => $release['package'],
             'last_updated'  => $release['published_at'],
+            'icons'         => self::icons(),
+            'banners'       => self::banners(),
             'sections'      => [
                 'description' => '<p>' . esc_html__('Turns this WordPress site into an OpenYacht node — federated yacht-listing sharing between brokerages.', 'openyacht') . '</p>',
                 'changelog'   => wp_kses_post(wpautop($release['notes'])),
             ],
         ];
+    }
+
+    /**
+     * @return array{'1x': string, '2x': string}
+     */
+    private static function icons(): array
+    {
+        $icon = plugins_url('assets/brand/openyacht-512.png', OPENYACHT_FILE);
+
+        return ['1x' => $icon, '2x' => $icon];
+    }
+
+    /**
+     * Core expects 772x250 (low) and 1544x500 (high) and paints them with
+     * background-size: cover, so the 3:1 brand banner fits either slot.
+     *
+     * @return array{low: string, high: string}
+     */
+    private static function banners(): array
+    {
+        $banner = plugins_url('assets/brand/openyacht-banner-1500x500.png', OPENYACHT_FILE);
+
+        return ['low' => $banner, 'high' => $banner];
     }
 
     /**

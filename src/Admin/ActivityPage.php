@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Admin;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use OpenYacht\Services;
 
 /**

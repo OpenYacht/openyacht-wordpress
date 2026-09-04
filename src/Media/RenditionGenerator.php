@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Media;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * The wire carries one large image per media item; receiving nodes
  * generate their own derived sizes (listing-schema.md §Media). Bytes in,

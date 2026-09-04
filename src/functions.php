@@ -8,6 +8,10 @@
 
 declare(strict_types=1);
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use OpenYacht\Federation\Listing;
 use OpenYacht\Federation\ListingStatus;
 use OpenYacht\Services;

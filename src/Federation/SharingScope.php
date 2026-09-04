@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Per-partner sharing scope: how a partner's feed composes with listing
  * audiences. A standard partner receives every everyone-audience listing

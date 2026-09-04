@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Admin;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use OpenYacht\Federation\BuilderRegistry;
 use OpenYacht\Federation\CategoryVocabulary;
 use OpenYacht\Federation\Listing;
@@ -62,6 +66,12 @@ final class ListingForm
             ? array_map('intval', (array) ($oldInput['audience_groups'] ?? []))
             : ($listing !== null ? Services::partnerGroups()->groupIdsForListing($listing->id) : []);
 
+        // The list screens link here carrying the type they were showing, so
+        // the create form defaults its type selector (and its back link) to match.
+        $requestedType = is_string($_GET['listing_type'] ?? null) && sanitize_key(wp_unslash($_GET['listing_type'])) === 'charter'
+            ? 'charter'
+            : 'sale';
+
         $sections = [
             'oy-identity' => __('Identity', 'openyacht'),
             'oy-vessel' => __('Vessel', 'openyacht'),
@@ -115,7 +125,7 @@ final class ListingForm
                             <?php esc_html_e('Listing type', 'openyacht'); ?>
                             <select name="oy[listing_type]" class="oy-input mt-1 w-full">
                                 <option value="sale"><?php esc_html_e('For sale', 'openyacht'); ?></option>
-                                <option value="charter" <?php selected(($oldInput['listing_type'] ?? (($_GET['listing_type'] ?? '') === 'charter' ? 'charter' : '')) === 'charter'); ?>><?php esc_html_e('For charter', 'openyacht'); ?></option>
+                                <option value="charter" <?php selected(($oldInput['listing_type'] ?? $requestedType) === 'charter'); ?>><?php esc_html_e('For charter', 'openyacht'); ?></option>
                             </select>
                         </label>
                     <?php endif; ?>
@@ -130,7 +140,7 @@ final class ListingForm
                         <button type="submit" class="oy-btn oy-btn-primary w-full">
                             <?php echo esc_html($listing === null ? __('Create draft', 'openyacht') : __('Save changes', 'openyacht')); ?>
                         </button>
-                        <a class="oy-btn oy-btn-ghost w-full" href="<?php echo esc_url(add_query_arg(['page' => ListingsPage::slugFor($listing->type ?? (($_GET['listing_type'] ?? '') === 'charter' ? 'charter' : 'sale'))], admin_url('admin.php'))); ?>">
+                        <a class="oy-btn oy-btn-ghost w-full" href="<?php echo esc_url(add_query_arg(['page' => ListingsPage::slugFor($listing->type ?? $requestedType)], admin_url('admin.php'))); ?>">
                             <?php esc_html_e('Back to listings', 'openyacht'); ?>
                         </a>
                     </div>

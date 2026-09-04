@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Storage boundary for federation keys. The wpdb implementation encrypts
  * private keys at rest; unit tests substitute an in-memory double.

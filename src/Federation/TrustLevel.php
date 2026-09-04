@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Partner trust: first contact is provisional until a human approves;
  * blocked partners are rejected outright (FP-9, FP-13).

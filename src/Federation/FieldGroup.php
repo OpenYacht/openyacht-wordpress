@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * The field groups an authority can grant or withhold per partner. The
  * payload a partner receives is the already-filtered view; withheld

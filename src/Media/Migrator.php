@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Media;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use OpenYacht\Federation\CopyMediaRepository;
 use OpenYacht\Federation\CopyRepository;
 use Throwable;

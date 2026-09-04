@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Admin;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use OpenYacht\Federation\Partner;
 use OpenYacht\Federation\TrustLevel;
 use OpenYacht\Services;
@@ -74,9 +78,12 @@ final class PartnersTable extends \WP_List_Table
         );
         $actions['grants'] = '<a href="' . esc_url($grantsUrl) . '">' . esc_html__('Sharing', 'openyacht') . '</a>';
 
-        $pinned = $item->pinnedKeyId !== null
-            ? '<br><span class="description">' . esc_html(sprintf(__('Pinned key: %s', 'openyacht'), $item->pinnedKeyId)) . '</span>'
-            : '';
+        $pinned = '';
+
+        if ($item->pinnedKeyId !== null) {
+            /* translators: %s: the partner's pinned signing key ID */
+            $pinned = '<br><span class="description">' . esc_html(sprintf(__('Pinned key: %s', 'openyacht'), $item->pinnedKeyId)) . '</span>';
+        }
 
         return '<strong>' . esc_html($item->domain) . '</strong>' . $pinned . $this->row_actions($actions);
     }

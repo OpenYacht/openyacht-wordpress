@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * One media item of an own listing — the wire truth (URL, hash,
  * dimensions, caption, category) lives here regardless of whether the

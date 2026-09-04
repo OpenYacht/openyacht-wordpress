@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * A node-defined grouping of partners (company sites, offices, third
  * parties, …). Groups are audience shorthand: a listing can select a

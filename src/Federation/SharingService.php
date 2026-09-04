@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Per-listing, per-partner sharing (the design-lead piece the reference
  * app inherits). Audience rules narrow what each partner's feed contains;

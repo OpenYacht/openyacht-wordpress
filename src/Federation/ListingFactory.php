@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Federation;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 /**
  * Column-map <-> Listing DTO conversion, shared by the wpdb repository's
  * callers, candidate validation (building an unsaved Listing to serialise

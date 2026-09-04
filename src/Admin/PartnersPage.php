@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace OpenYacht\Admin;
 
+if (! defined('ABSPATH')) {
+    exit;
+}
+
 use OpenYacht\Services;
 use Throwable;
 
@@ -23,7 +27,14 @@ final class PartnersPage
      * menu's resting gray — the display addon carries the same mark for
      * its post type menus; keep the two in sync when it changes.
      */
-    private const MENU_ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#a7aaad" d="M10.8 2.2V13.2H3.4ZM13 4.8V13.2H19.6ZM2.6 15.4H21.4L18.2 19.6H5.8Z"/></svg>';
+    /**
+     * The OpenYacht mark (signal flags Oscar over Yankee on a halyard) in
+     * its small-size favicon cut, one colour and fill-only: core's
+     * svg-painter recolours every fill to the admin colour scheme, and
+     * leaves strokes alone, so the stripes are drawn as polygons. Master:
+     * https://openyacht.org/brand/
+     */
+    private const MENU_ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><clipPath id="y"><rect x="10" y="17.5" width="19" height="13"/></clipPath></defs><g fill="#a7aaad"><rect x="4" y="0" width="2.5" height="32"/><polygon points="10,1.5 27.6,1.5 10,13.5"/><polygon points="29,2.5 29,14.5 11.4,14.5"/><g clip-path="url(#y)"><polygon points="1.3,-7.3 41.3,32.7 38.7,35.3 -1.3,-4.7"/><polygon points="1.3,3.2 41.3,43.2 38.7,45.8 -1.3,5.8"/><polygon points="1.3,13.7 41.3,53.7 38.7,56.3 -1.3,15.8"/></g></g></svg>';
 
     public static function menuIcon(): string
     {
@@ -417,7 +428,9 @@ final class PartnersPage
             echo '<input type="hidden" name="op" value="group_save">';
             echo '<input type="hidden" name="group_id" value="' . (int) $group->id . '">';
             wp_nonce_field(self::ACTION);
-            echo '<p><input type="text" name="group_name" value="' . esc_attr($group->name) . '" class="regular-text" aria-label="' . esc_attr__('Group name', 'openyacht') . '"> <span class="description">' . esc_html(sprintf(_n('%d member', '%d members', count($members), 'openyacht'), count($members))) . '</span></p>';
+            /* translators: %d: number of partners in the group */
+            $memberCount = sprintf(_n('%d member', '%d members', count($members), 'openyacht'), count($members));
+            echo '<p><input type="text" name="group_name" value="' . esc_attr($group->name) . '" class="regular-text" aria-label="' . esc_attr__('Group name', 'openyacht') . '"> <span class="description">' . esc_html($memberCount) . '</span></p>';
             echo '<fieldset style="display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0;">';
             echo '<legend class="screen-reader-text">' . esc_html__('Members', 'openyacht') . '</legend>';
 
