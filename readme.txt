@@ -4,7 +4,7 @@ Tags: yacht, listings, federation, brokerage, charter
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.5.0
+Stable tag: 0.5.1
 License: AGPL-3.0-only
 License URI: https://www.gnu.org/licenses/agpl-3.0.html
 
@@ -57,6 +57,17 @@ Multisite is not a supported configuration. A node's identity is one domain with
 No. New listings are created as drafts, publishing is an explicit transition, and every listing carries its own audience setting. Partnering with a node carries no obligation to import anything from it either.
 
 == Changelog ==
+
+= 0.5.1 =
+
+Maintenance release working through a third-party plugin audit of 0.5.0. No wire or database change; upgrading is a straight plugin update.
+
+* Added this readme.txt, with the changelog back to 0.1.0.
+* Direct-access guards in every source file.
+* Accessibility: the list screens' search fields carry screen-reader labels, and each listings row checkbox is labelled with the listing name.
+* Translators comments on the placeholder strings that lacked them.
+* The release zip no longer ships composer.json or the dependencies' README, CHANGELOG and SECURITY files, and the build refuses to run when the readme Stable tag disagrees with the plugin version.
+* The admin menu carries the OpenYacht code-hoist mark, and the Updates screen and "View details" modal show the plugin icon and banner.
 
 = 0.5.0 =
 
