@@ -10,6 +10,7 @@ if (! defined('ABSPATH')) {
 
 use OpenYacht\Data;
 use OpenYacht\Federation\ListingCopy;
+use OpenYacht\Federation\ListingPriceLine;
 use OpenYacht\Media\MediaPolicy;
 use OpenYacht\Services;
 
@@ -478,32 +479,7 @@ final class SyncedListingsPage
      */
     private function priceLine(ListingCopy $copy): string
     {
-        $price = $copy->payload['listing']['price'] ?? [];
-
-        if (! empty($price['on_application'])) {
-            return __('POA', 'openyacht');
-        }
-
-        if (isset($price['amount'], $price['currency'])) {
-            return trim($price['currency'] . ' ' . number_format((float) $price['amount']));
-        }
-
-        $rates = $copy->payload['charter']['rates'] ?? [];
-
-        if (is_array($rates) && $rates !== []) {
-            $mins = array_filter(array_map(static fn (array $rate): ?float => is_numeric($rate['amount_min'] ?? null) ? (float) $rate['amount_min'] : null, $rates));
-            $maxs = array_filter(array_map(static fn (array $rate): ?float => is_numeric($rate['amount_max'] ?? null) ? (float) $rate['amount_max'] : null, $rates));
-            $currency = (string) ($rates[0]['currency'] ?? '');
-
-            if ($mins !== [] && $currency !== '') {
-                $low = number_format(min($mins));
-                $high = $maxs !== [] ? number_format(max($maxs)) : null;
-
-                return $currency . ' ' . ($high !== null && $high !== $low ? $low . '–' . $high : $low) . ' ' . __('/ week', 'openyacht');
-            }
-        }
-
-        return 'EM–';
+        return ListingPriceLine::fromPayload($copy->payload) ?? '—';
     }
 
     /**

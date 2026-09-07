@@ -85,15 +85,18 @@ final class Router
                 // JsonResponder::send() exits.
                 // no break
             case 'capabilities':
-                // Unsigned capability negotiation (API-6). This node
-                // advertises no optional features yet: `features` lists
+                // Unsigned capability negotiation (API-6). `features` lists
                 // optional protocol features only — the sale-listing schema
                 // and updated_since sync are the mandatory baseline.
+                // charter_listings governs whether the node implements the
+                // charter block of the wire schema, not what inventory it
+                // holds: this node authors, serves and consumes type:
+                // "charter" listings with a charter object.
                 JsonResponder::send([
                     'protocol_versions' => NodeConfig::PROTOCOL_VERSIONS,
                     'features' => [
                         'subscriptions' => false,
-                        'charter_listings' => false,
+                        'charter_listings' => true,
                         'media_hashes' => true,
                     ],
                     'limits' => [

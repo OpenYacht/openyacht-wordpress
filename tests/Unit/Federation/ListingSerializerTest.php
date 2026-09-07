@@ -221,6 +221,41 @@ final class ListingSerializerTest extends TestCase
     }
 
     #[Group('LS-1')]
+    #[Group('LS-14')]
+    public function testCharterListingsSerialiseTheCharterBranchOfTheSchema(): void
+    {
+        $charter = new Listing(...array_replace(
+            $this->listingConstructorArgs($this->listing()),
+            ['type' => 'charter', 'priceAmount' => null, 'priceCurrency' => null],
+        ));
+        // History exists for the row (a data-entry slip); charter listings
+        // never historicise a price, so it must not reach the wire.
+        $this->prices->append(1, '12500000', 'EUR');
+        $serializer = $this->serializer();
+
+        $wire = $serializer->serialize($charter, null);
+
+        self::assertSame('charter', $wire['type']);
+        self::assertNull($wire['listing']['price'], 'charter listings carry price: null; their pricing is charter.rates');
+        self::assertSame([], $wire['listing']['price_history'], 'no price history on the charter branch');
+        self::assertSame(['rates', 'operating_areas', 'summer_base_port', 'winter_base_port', 'crew'], array_keys($wire['charter']));
+
+        $root = dirname(__DIR__, 3);
+        $validator = new ListingValidator(
+            new BuilderRegistry($root . '/resources/registry/builders.json'),
+            new CategoryVocabulary($root . '/resources/registry/categories.json'),
+            $root . '/resources/schemas/v1/listing.schema.json',
+        );
+        self::assertSame([], $validator->validate($wire), 'the charter branch validates against the vendored schema');
+
+        // charter.rates sits under the pricing field group: withheld as []
+        // for a partner without it, present for one with it.
+        self::assertSame([], $serializer->serialize($charter, $this->partner([]))['charter']['rates']);
+        self::assertArrayHasKey('rates', $serializer->serialize($charter, $this->partner(null))['charter']);
+        self::assertNull($serializer->serialize($this->listing(), null)['charter'], 'sale listings carry charter: null');
+    }
+
+    #[Group('LS-1')]
     public function testFeatureQuantityIsEmittedAndBackfilledForOlderStoredFeatures(): void
     {
         $listing = new Listing(...array_replace(

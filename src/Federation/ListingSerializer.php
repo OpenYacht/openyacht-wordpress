@@ -75,16 +75,7 @@ final class ListingSerializer
                 $listing->features,
             )),
             'media' => $this->mediaBlock($listing, $granted(FieldGroup::Documents)),
-            // Charter listings require the block as an object (schema type
-            // conditional); shape-complete and empty until charter
-            // authoring fields exist — sale listings carry null.
-            'charter' => $listing->type === 'charter' ? [
-                'rates' => [],
-                'operating_areas' => [],
-                'summer_base_port' => null,
-                'winter_base_port' => null,
-                'crew' => [],
-            ] : null,
+            'charter' => $listing->type === 'charter' ? $this->charter($listing, $granted(FieldGroup::Pricing)) : null,
             'usage' => $this->usage(),
             'compliance' => $this->compliance($listing),
         ];
@@ -147,7 +138,9 @@ final class ListingSerializer
                 'on_application' => $listing->priceOnApplication,
                 'starting_price' => $listing->startingPrice,
             ],
-            'price_history' => $historyGranted && $pricingGranted
+            // Charter listings have no asking price to historicise: the
+            // block is always empty for them, without consulting history.
+            'price_history' => $listing->type !== 'charter' && $historyGranted && $pricingGranted
                 ? array_map(
                     static fn (array $entry): array => [
                         'amount' => $entry['amount'],
@@ -160,6 +153,37 @@ final class ListingSerializer
             'location' => $this->location($listing, $locationGranted),
             'brokers' => [],
         ];
+    }
+
+    /**
+     * The charter block, required as an object for charter listings (schema
+     * type conditional). Shape-complete and empty until charter authoring
+     * fields exist; the gate is already in place because `charter.rates`
+     * sits under the pricing field group (LS-14) and must be withheld as
+     * `[]` the moment real rates are authored.
+     *
+     * @return array<string, mixed>
+     */
+    private function charter(Listing $listing, bool $pricingGranted): array
+    {
+        return [
+            'rates' => $pricingGranted ? $this->charterRates($listing) : [],
+            'operating_areas' => [],
+            'summer_base_port' => null,
+            'winter_base_port' => null,
+            'crew' => [],
+        ];
+    }
+
+    /**
+     * The authored rate set — empty until charter authoring fields exist.
+     * Callers gate it on the pricing field group before it reaches the wire.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function charterRates(Listing $listing): array
+    {
+        return [];
     }
 
     /**

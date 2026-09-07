@@ -170,4 +170,57 @@ final class IngestServiceTest extends TestCase
         self::assertSame('https://node.test/u/aft-t.jpg', $media[0]->thumbnailUrl);
         self::assertNull($media[1]->thumbnailUrl, 'omitted thumbnail_url ingests as null, the valid wire value');
     }
+
+    private function profileImage(): array
+    {
+        return [
+            'kind' => 'profile',
+            'url' => 'https://node.test/uploads/hero.jpg',
+            'thumbnail_url' => 'https://node.test/uploads/hero-large.jpg',
+            'sha256' => str_repeat('ab', 32),
+            'width' => 1600,
+            'height' => 1000,
+            'sort' => 0,
+        ];
+    }
+
+    public function testWirePayloadTypeIsHonouredOnIngest(): void
+    {
+        $payload = static fn (string $type): array => [
+            'type' => $type,
+            'listing' => ['name' => 'FICTIONAL ' . strtoupper($type), 'price' => $type === 'sale' ? ['amount' => '1000000', 'currency' => 'EUR'] : null],
+            'specifications' => ['power_or_sail' => 'power'],
+            'media' => ['profile' => ['url' => 'https://node.test/uploads/hero.jpg', 'thumbnail_url' => 'https://node.test/uploads/hero-large.jpg', 'sha256' => str_repeat('ab', 32), 'width' => 1600, 'height' => 1000]],
+        ];
+
+        $charter = $this->ingest->publish($payload('charter'));
+        $sale = $this->ingest->publish($payload('sale'));
+
+        self::assertNotInstanceOf(\WP_Error::class, $charter, json_encode($charter instanceof \WP_Error ? $charter->get_error_data() : null));
+        self::assertNotInstanceOf(\WP_Error::class, $sale, json_encode($sale instanceof \WP_Error ? $sale->get_error_data() : null));
+        self::assertSame('charter', $charter->type, 'a charter payload must not be stored as a sale listing');
+        self::assertSame('sale', $sale->type);
+        self::assertSame(
+            [],
+            array_values(array_filter($this->prices->entries, static fn (array $entry): bool => $entry['listing_id'] === $charter->id)),
+            'a charter payload seeds no price history',
+        );
+    }
+
+    public function testRevisionValidatesAgainstTheStoredTypeWhenTheFormOmitsIt(): void
+    {
+        $charter = $this->ingest->createFromColumns(
+            ['type' => 'charter', 'name' => 'FICTIONAL CHARTER', 'specifications' => ['power_or_sail' => 'sail']],
+            [$this->profileImage()],
+            ListingStatus::Active,
+        );
+        self::assertNotInstanceOf(\WP_Error::class, $charter);
+
+        // The edit form carries no type field and defaults to sale.
+        $revised = $this->ingest->reviseFromColumns($charter, ['type' => 'sale', 'name' => 'FICTIONAL CHARTER II'], [$this->profileImage()]);
+
+        self::assertNotInstanceOf(\WP_Error::class, $revised);
+        self::assertSame('charter', $revised->type, 'type is identity: a revision never changes it');
+        self::assertSame('FICTIONAL CHARTER II', $revised->name);
+    }
 }

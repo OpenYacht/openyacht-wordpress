@@ -9,6 +9,7 @@ if (! defined('ABSPATH')) {
 }
 
 use OpenYacht\Federation\ListingCopy;
+use OpenYacht\Federation\ListingPriceLine;
 use OpenYacht\Services;
 
 if (! class_exists('WP_List_Table')) {
@@ -168,34 +169,7 @@ final class SyncedListingsTable extends \WP_List_Table
      */
     public function column_price($item): string
     {
-        $price = $item->payload['listing']['price'] ?? [];
-
-        if (! empty($price['on_application'])) {
-            return esc_html__('POA', 'openyacht');
-        }
-
-        if (isset($price['amount'], $price['currency'])) {
-            return esc_html($price['currency'] . ' ' . number_format((float) $price['amount']));
-        }
-
-        // Charter listings have no asking price by design — their pricing
-        // is the charter rate block, so show the weekly range instead.
-        $rates = $item->payload['charter']['rates'] ?? [];
-
-        if (is_array($rates) && $rates !== []) {
-            $mins = array_filter(array_map(static fn (array $rate): ?float => is_numeric($rate['amount_min'] ?? null) ? (float) $rate['amount_min'] : null, $rates));
-            $maxs = array_filter(array_map(static fn (array $rate): ?float => is_numeric($rate['amount_max'] ?? null) ? (float) $rate['amount_max'] : null, $rates));
-            $currency = (string) ($rates[0]['currency'] ?? '');
-
-            if ($mins !== [] && $currency !== '') {
-                $low = number_format(min($mins));
-                $high = $maxs !== [] ? number_format(max($maxs)) : null;
-
-                return esc_html($currency . ' ' . ($high !== null && $high !== $low ? "{$low}–{$high}" : $low) . ' ' . __('/ week', 'openyacht'));
-            }
-        }
-
-        return '—';
+        return esc_html(ListingPriceLine::fromPayload($item->payload) ?? '—');
     }
 
     /**

@@ -90,6 +90,12 @@ final class IngestService
      */
     public function reviseFromColumns(Listing $listing, array $columns, array $mediaRows)
     {
+        // Type is part of the listing's identity and never changes on
+        // revision (the repository drops it). The edit form carries no type
+        // field and defaults to sale, so pin the candidate to the stored
+        // type here — otherwise a charter listing would be validated
+        // against the sale branch of the schema conditional.
+        $columns['type'] = $listing->type;
         $merged = array_merge(ListingFactory::toColumns($listing), $columns);
         $errors = $this->validateCandidate($merged, $mediaRows, $listing->status);
 
@@ -148,7 +154,7 @@ final class IngestService
         $coordinates = is_array($location['coordinates'] ?? null) ? $location['coordinates'] : [];
 
         return [
-            'type' => 'sale',
+            'type' => ($data['type'] ?? null) === 'charter' ? 'charter' : 'sale',
             'name' => $listing['name'] ?? null,
             'summary' => $listing['summary'] ?? null,
             'yacht_condition' => $data['condition'] ?? null,
