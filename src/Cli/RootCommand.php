@@ -93,6 +93,7 @@ final class RootCommand
                         $result->tombstoned ?? 0,
                     )),
                     'skipped (backoff)' => WP_CLI::line("{$domain}: skipped (failure backoff; use --force to override)"),
+                    'awaiting approval' => WP_CLI::line("{$domain}: awaiting approval on their side — nothing to sync yet"),
                     default => WP_CLI::warning("{$domain}: " . ($error?->getMessage() ?? 'failed')),
                 };
             },

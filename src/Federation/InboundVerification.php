@@ -27,11 +27,17 @@ final class InboundVerification
 {
     private const REFETCH_WINDOW_SECONDS = 60;
 
+    /**
+     * @param string|null $ownDomain this node's identity domain; resolved
+     *                               from NodeConfig when null (tests pass
+     *                               it explicitly)
+     */
     public function __construct(
         private readonly Verifier $verifier,
         private readonly PartnerRepository $partners,
         private readonly PartnerService $partnerService,
         private readonly Logger $logger,
+        private readonly ?string $ownDomain = null,
     ) {
     }
 
@@ -44,6 +50,14 @@ final class InboundVerification
 
         if ($senderDomain === '' || $keyId === '' || $timestamp === '' || $signature === '') {
             return $this->reject($request, $senderDomain, ErrorCode::SignatureInvalid, 'Missing X-OpenYacht signature headers.');
+        }
+
+        // A request claiming to be this node is rejected before the
+        // partner lookup: otherwise an impostor presenting our own domain
+        // would be auto-registered as our provisional self-partner (and
+        // fire the first-contact notification).
+        if ($senderDomain === ($this->ownDomain ?? NodeConfig::identityDomain())) {
+            return $this->reject($request, $senderDomain, ErrorCode::SignatureInvalid, 'The sender claims to be this node.');
         }
 
         // First contact from an unknown domain is trusted-on-first-use as

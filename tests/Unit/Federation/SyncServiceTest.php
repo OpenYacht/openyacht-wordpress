@@ -6,6 +6,7 @@ namespace OpenYacht\Tests\Unit\Federation;
 
 use Brain\Monkey\Actions;
 use OpenYacht\Federation\Partner;
+use OpenYacht\Federation\PartnerAwaitingApproval;
 use OpenYacht\Federation\SyncService;
 use OpenYacht\Federation\TrustLevel;
 use OpenYacht\Tests\Support\FakeFederationClient;
@@ -191,5 +192,45 @@ final class SyncServiceTest extends TestCase
         self::assertTrue($this->sync->isDue($partner(10), $base + 86401));
         // no failures -> always due
         self::assertTrue($this->sync->isDue($this->partners->insert(['domain' => 'ok.example']), $base));
+    }
+
+    #[Group('FP-13')]
+    public function testAwaitingTheirApprovalIsNotASyncFailure(): void
+    {
+        // Their authority answered correctly: delivered, verified, refused
+        // because no human has approved us yet. Backing off would leave
+        // this node idle for hours after they finally click approve.
+        $partner = $this->partner();
+        $this->client->queueJson(['error' => ['code' => 'PARTNER_PROVISIONAL', 'message' => 'Partnership is pending approval; no listings are shared yet.']], 403);
+
+        try {
+            $this->sync->sync($partner);
+            self::fail('expected PartnerAwaitingApproval');
+        } catch (PartnerAwaitingApproval $awaiting) {
+            self::assertStringContainsString('authority.example', $awaiting->getMessage());
+        }
+
+        $fresh = $this->partners->find($partner->id);
+        self::assertSame(0, $fresh?->consecutiveFailures, 'no failure recorded');
+        self::assertNotNull($fresh?->lastAttemptedAt, 'the attempt itself is still recorded');
+        self::assertTrue($this->sync->isDue($fresh), 'polling continues on the normal schedule');
+    }
+
+    #[Group('FP-13')]
+    public function testAnyOtherRefusalStillCountsAndBacksOff(): void
+    {
+        $partner = $this->partner();
+        $this->client->queueJson(['error' => ['code' => 'PARTNER_BLOCKED', 'message' => 'This partner is blocked.']], 403);
+
+        try {
+            $this->sync->sync($partner);
+            self::fail('expected a sync failure');
+        } catch (PartnerAwaitingApproval) {
+            self::fail('PARTNER_BLOCKED must not be read as awaiting approval');
+        } catch (RuntimeException) {
+            // expected
+        }
+
+        self::assertSame(1, $this->partners->find($partner->id)?->consecutiveFailures);
     }
 }

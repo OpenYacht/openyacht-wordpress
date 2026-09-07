@@ -8,21 +8,29 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
+use LogicException;
 use RuntimeException;
 
 /**
  * Partner lifecycle: first contact (TOFU), key refresh with reinstall
- * detection, out-of-band registration, and the human approve/block
- * decisions.
+ * detection, out-of-band registration, the human approve/block
+ * decisions, and removal of a partner nothing has been received from.
  *
  * // federation-protocol.md §Identity and Trust Model, §Partner Lifecycle
  */
 final class PartnerService
 {
+    /**
+     * @param string|null $ownDomain this node's identity domain; resolved
+     *                               from NodeConfig when null (tests pass
+     *                               it explicitly)
+     */
     public function __construct(
         private readonly PartnerRepository $partners,
         private readonly WellKnownClient $wellKnown,
         private readonly Logger $logger,
+        private readonly ?CopyRepository $copies = null,
+        private readonly ?string $ownDomain = null,
     ) {
     }
 
@@ -34,6 +42,7 @@ final class PartnerService
     public function add(string $domain): Partner
     {
         $domain = strtolower(trim($domain));
+        $this->assertNotOwnDomain($domain);
         $this->assertNotRegistered($domain);
         $document = $this->wellKnown->fetch($domain);
         $now = gmdate('Y-m-d H:i:s');
@@ -71,6 +80,7 @@ final class PartnerService
     public function addWithKey(string $domain, string $publicKey, ?string $nodeUuid = null): Partner
     {
         $domain = strtolower(trim($domain));
+        $this->assertNotOwnDomain($domain);
         $this->assertNotRegistered($domain);
         $rawPublicKey = base64_decode($publicKey, true);
 
@@ -194,11 +204,75 @@ final class PartnerService
         return $this->fresh($partner);
     }
 
+    /**
+     * A partner can be removed while, and only while, nothing has been
+     * received from it. Once copies exist the partner row is their
+     * provenance anchor (ID-3) and the partnership ends by blocking — the
+     * trust model has no "removed" state (federation-protocol.md §Trust
+     * levels). Approval status is irrelevant: approve/block are already in
+     * the activity log keyed by domain and survive the row.
+     */
+    public function isRemovable(Partner $partner): bool
+    {
+        return $this->copies()->countForPartner($partner->id) === 0;
+    }
+
+    /**
+     * Undo a mistaken add. Deletes the partner together with its audience
+     * selections, group memberships and visibility-log rows, and logs the
+     * removal with the domain and trust level at the time. A removed
+     * partner that polls again reappears through first-contact TOFU as a
+     * fresh provisional partner — that IS an unsolicited introduction
+     * again; block it if that is unwanted.
+     *
+     * @throws RuntimeException when listings have been received from it
+     */
+    public function remove(Partner $partner): void
+    {
+        if (! $this->isRemovable($partner)) {
+            throw new RuntimeException("Listings have been received from {$partner->domain}; block it instead of removing it.");
+        }
+
+        $this->logger->log(
+            'partner',
+            "Partner {$partner->domain} removed ({$partner->trustLevel->value}, nothing received)",
+            'partner_removed',
+            $partner->id,
+            null,
+            ['domain' => $partner->domain, 'trust_level' => $partner->trustLevel->value],
+        );
+
+        $this->partners->delete($partner->id);
+        do_action('openyacht_partner_removed', $partner);
+    }
+
     private function assertNotRegistered(string $domain): void
     {
         if ($this->partners->findByDomain($domain) !== null) {
             throw new RuntimeException("Partner {$domain} is already registered.");
         }
+    }
+
+    /**
+     * A node cannot partner with itself: it would fetch its own well-known
+     * document, pin its own key, sign requests to itself and store its own
+     * listings as partner copies under its own authority domain.
+     */
+    private function assertNotOwnDomain(string $domain): void
+    {
+        if ($domain === $this->ownDomain()) {
+            throw new RuntimeException("{$domain} is this node's own identity domain; a node cannot partner with itself.");
+        }
+    }
+
+    private function ownDomain(): string
+    {
+        return $this->ownDomain ?? NodeConfig::identityDomain();
+    }
+
+    private function copies(): CopyRepository
+    {
+        return $this->copies ?? throw new LogicException('PartnerService needs a CopyRepository to decide removability.');
     }
 
     private function fresh(Partner $partner): Partner

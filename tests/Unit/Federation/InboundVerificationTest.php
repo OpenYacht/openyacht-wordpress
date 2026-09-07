@@ -66,11 +66,14 @@ final class InboundVerificationTest extends TestCase
 
     private function middleware(): InboundVerification
     {
+        // home_url is stubbed to the SENDER so the test Signer signs as the
+        // sender; the receiver's own identity is passed explicitly.
         return new InboundVerification(
             new Verifier(),
             $this->partners,
-            new PartnerService($this->partners, $this->wellKnown, $this->logger),
+            new PartnerService($this->partners, $this->wellKnown, $this->logger, null, self::RECEIVER),
             $this->logger,
+            self::RECEIVER,
         );
     }
 
@@ -103,6 +106,34 @@ final class InboundVerificationTest extends TestCase
         $result = $this->middleware()->authenticate(new RequestContext('GET', '/openyacht/v1/listings', self::RECEIVER, '', []));
 
         self::assertSame(ErrorCode::SignatureInvalid, $result->error);
+    }
+
+    public function testARequestClaimingToBeThisNodeIsRejectedBeforeFirstContact(): void
+    {
+        // Otherwise an impostor presenting our own domain would be TOFU
+        // auto-registered as our provisional self-partner.
+        $this->wellKnown->shouldNotReceive('fetch');
+        $signed = $this->signedRequest();
+        $headers = ['x-openyacht-node' => self::RECEIVER] + $this->headersOf($signed);
+
+        $result = $this->middleware()->authenticate(new RequestContext('GET', $signed->pathWithQuery, self::RECEIVER, '', $headers));
+
+        self::assertSame(ErrorCode::SignatureInvalid, $result->error);
+        self::assertNull($this->partners->findByDomain(self::RECEIVER), 'no self-partner was registered');
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function headersOf(RequestContext $request): array
+    {
+        $headers = [];
+
+        foreach (['X-OpenYacht-Node', 'X-OpenYacht-Key', 'X-OpenYacht-Timestamp', 'X-OpenYacht-Signature'] as $name) {
+            $headers[strtolower($name)] = $request->header($name);
+        }
+
+        return $headers;
     }
 
     #[Group('FP-13')]

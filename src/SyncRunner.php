@@ -9,6 +9,7 @@ if (! defined('ABSPATH')) {
 }
 
 use OpenYacht\Federation\Partner;
+use OpenYacht\Federation\PartnerAwaitingApproval;
 use OpenYacht\Federation\SyncResult;
 use Throwable;
 
@@ -66,6 +67,15 @@ final class SyncRunner
 
                 if ($report !== null) {
                     $report('synced', $partner, $result, null);
+                }
+            } catch (PartnerAwaitingApproval $awaiting) {
+                // Not a failure: their side has not approved us yet. Logged
+                // as an ordinary line so the activity screen shows why
+                // nothing arrives, without an error and without backoff.
+                Services::logger()->log('sync', $awaiting->getMessage(), 'awaiting_approval', $partner->id);
+
+                if ($report !== null) {
+                    $report('awaiting approval', $partner, null, $awaiting);
                 }
             } catch (Throwable $exception) {
                 $allOk = false;

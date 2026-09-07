@@ -88,11 +88,40 @@ final class PartnersPage
         try {
             switch ($op) {
                 case 'add':
+                    // Refused here, before any fetch, with a message the
+                    // operator can act on; the service refuses it too for
+                    // every other caller.
+                    if ($domain === \OpenYacht\Federation\NodeConfig::identityDomain()) {
+                        set_transient(
+                            'openyacht_partner_error_' . get_current_user_id(),
+                            sprintf(
+                                /* translators: %s: this site's own identity domain */
+                                __('%s is this site\'s own identity domain. A node cannot partner with itself.', 'openyacht'),
+                                $domain,
+                            ),
+                            60,
+                        );
+                        break;
+                    }
+
                     $publicKey = isset($_POST['public_key']) ? trim(sanitize_text_field(wp_unslash($_POST['public_key']))) : '';
                     $publicKey === ''
                         ? $service->add($domain)
                         : $service->addWithKey($domain, $publicKey);
                     $notice = 'added';
+                    break;
+                case 'remove':
+                    $partner = Services::partners()->findByDomain($domain);
+
+                    if ($partner === null) {
+                        break;
+                    }
+
+                    // Gated in the service: only while nothing has been
+                    // received from the partner. Otherwise it explains that
+                    // blocking is the way a partnership ends.
+                    $service->remove($partner);
+                    $notice = 'removed';
                     break;
                 case 'grants':
                     $partner = Services::partners()->findByDomain($domain);
@@ -203,7 +232,15 @@ final class PartnersPage
                     // point. The cron watchdog's last-run option is left
                     // alone, so a single manual sync can't mask a sleeping
                     // wp-cron.
-                    $result = Services::syncService()->sync($partner);
+                    try {
+                        $result = Services::syncService()->sync($partner);
+                    } catch (\OpenYacht\Federation\PartnerAwaitingApproval) {
+                        // Their side has not approved us yet: a healthy
+                        // state, not an error, and not a backoff.
+                        $notice = 'awaiting_approval';
+                        break;
+                    }
+
                     Services::logger()->log(
                         'sync',
                         "Synced {$partner->domain}: {$result->created} created, {$result->updated} updated, {$result->tombstoned} tombstoned",
@@ -285,8 +322,18 @@ final class PartnersPage
             return;
         }
 
+        if ($notice === 'awaiting_approval') {
+            printf(
+                '<div class="notice notice-info is-dismissible"><p>%s</p></div>',
+                esc_html__('The partner has not approved this site yet, so there is nothing to sync. Polling continues on the normal schedule and picks up the moment it approves.', 'openyacht'),
+            );
+
+            return;
+        }
+
         $messages = [
             'added' => __('Partner added (provisional). Approve it to start receiving requests as a verified partner.', 'openyacht'),
+            'removed' => __('Partner removed. If it contacts this site again it reappears as a new provisional partner; block it if that is unwanted.', 'openyacht'),
             'approved' => __('Partner approved — it starts receiving listings on its next poll. Review below what it gets: every field group is granted by default.', 'openyacht'),
             'blocked' => __('Partner blocked. All its requests will be rejected.', 'openyacht'),
             'refreshed' => __('Partner keys refreshed.', 'openyacht'),

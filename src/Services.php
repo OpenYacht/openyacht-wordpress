@@ -97,6 +97,7 @@ final class Services
             self::partners(),
             new WellKnownClient(),
             self::logger(),
+            self::copies(),
         );
     }
 

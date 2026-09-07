@@ -72,6 +72,20 @@ final class PartnersTable extends \WP_List_Table
         }
 
         $actions['refresh'] = $this->actionButton($item, 'refresh', __('Refresh keys', 'openyacht'));
+
+        // Undo for a mistaken add: only while nothing has been received —
+        // once copies exist the row is their provenance anchor and Block
+        // is how a partnership ends.
+        if (Services::partnerService()->isRemovable($item)) {
+            $actions['remove'] = $this->actionButton(
+                $item,
+                'remove',
+                __('Remove', 'openyacht'),
+                /* translators: %s: partner domain */
+                sprintf(__('Remove %s? Nothing has been received from it. Its sharing selections and group memberships go with it.', 'openyacht'), $item->domain),
+            );
+        }
+
         $grantsUrl = add_query_arg(
             ['page' => PartnersPage::MENU_SLUG, 'action' => 'grants', 'domain' => $item->domain],
             admin_url('admin.php'),
@@ -169,9 +183,9 @@ final class PartnersTable extends \WP_List_Table
         return '';
     }
 
-    private function actionButton(Partner $partner, string $op, string $label): string
+    private function actionButton(Partner $partner, string $op, string $label, ?string $confirm = null): string
     {
-        $form = '<form method="post" action="%s" style="display:inline">'
+        $form = '<form method="post" action="%s" style="display:inline"%s>'
             . '<input type="hidden" name="action" value="openyacht_partner">'
             . '<input type="hidden" name="op" value="%s">'
             . '<input type="hidden" name="domain" value="%s">'
@@ -180,6 +194,7 @@ final class PartnersTable extends \WP_List_Table
         return sprintf(
             $form,
             esc_url(admin_url('admin-post.php')),
+            $confirm === null ? '' : ' onsubmit="return confirm(\'' . esc_js($confirm) . '\');"',
             esc_attr($op),
             esc_attr($partner->domain),
             wp_nonce_field('openyacht_partner', '_wpnonce', true, false),

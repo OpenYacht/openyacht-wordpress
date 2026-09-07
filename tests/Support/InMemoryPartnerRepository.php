@@ -73,6 +73,11 @@ final class InMemoryPartnerRepository implements PartnerRepository
         }
     }
 
+    public function delete(int $id): void
+    {
+        unset($this->partners[$id]);
+    }
+
     /**
      * @param array<string, mixed> $columns
      */

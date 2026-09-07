@@ -35,6 +35,8 @@ final class SyncService
     }
 
     /**
+     * @throws PartnerAwaitingApproval when the partner has not approved this
+     *                                 node yet — not recorded as a failure
      * @throws Throwable on sync failure, after recording the failed attempt
      */
     public function sync(Partner $partner): SyncResult
@@ -43,6 +45,12 @@ final class SyncService
 
         try {
             return $this->pullAllPages($partner);
+        } catch (PartnerAwaitingApproval $awaiting) {
+            // "Authenticated but not yet approved" is the handshake working
+            // as designed on both sides. Counting it would compound the
+            // backoff while a human is simply yet to click approve, and
+            // leave this node idle for hours after they do.
+            throw $awaiting;
         } catch (Throwable $exception) {
             $this->partners->incrementFailures($partner->id);
 
@@ -88,6 +96,10 @@ final class SyncService
             $response = $this->client->get($partner, '/openyacht/v1/listings?' . http_build_query($query));
 
             if (! $response->ok()) {
+                if ($this->isAwaitingApproval($response)) {
+                    throw new PartnerAwaitingApproval("{$partner->domain} has not approved this node yet; nothing to sync until it does.");
+                }
+
                 throw new RuntimeException(
                     "Sync with {$partner->domain} failed: HTTP {$response->status} " . substr($response->body, 0, 500),
                 );
@@ -125,6 +137,22 @@ final class SyncService
         ]);
 
         return new SyncResult($created, $updated, $tombstoned);
+    }
+
+    /**
+     * Deliberately narrow: a 403 carrying PARTNER_PROVISIONAL and nothing
+     * else. Any other refusal (PARTNER_BLOCKED above all) is a failure
+     * and backs off as before.
+     *
+     * // api-design.md §Errors
+     */
+    private function isAwaitingApproval(HttpResponse $response): bool
+    {
+        if ($response->status !== ErrorCode::PartnerProvisional->httpStatus()) {
+            return false;
+        }
+
+        return ($response->json()['error']['code'] ?? null) === ErrorCode::PartnerProvisional->value;
     }
 
     private function watermarkParam(Partner $partner): ?string

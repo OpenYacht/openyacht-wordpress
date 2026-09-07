@@ -11,6 +11,7 @@ use OpenYacht\Federation\PartnerService;
 use OpenYacht\Federation\TrustLevel;
 use OpenYacht\Federation\WellKnownClient;
 use OpenYacht\Tests\Support\CollectingLogger;
+use OpenYacht\Tests\Support\InMemoryCopyRepository;
 use OpenYacht\Tests\Support\InMemoryPartnerRepository;
 use OpenYacht\Tests\Unit\TestCase;
 use PHPUnit\Framework\Attributes\Group;
@@ -18,7 +19,11 @@ use RuntimeException;
 
 final class PartnerServiceTest extends TestCase
 {
+    private const OWN_DOMAIN = 'node.test';
+
     private InMemoryPartnerRepository $partners;
+
+    private InMemoryCopyRepository $copies;
 
     private CollectingLogger $logger;
 
@@ -26,6 +31,7 @@ final class PartnerServiceTest extends TestCase
     {
         parent::setUp();
         $this->partners = new InMemoryPartnerRepository();
+        $this->copies = new InMemoryCopyRepository();
         $this->logger = new CollectingLogger();
     }
 
@@ -37,7 +43,7 @@ final class PartnerServiceTest extends TestCase
         $client = Mockery::mock(WellKnownClient::class);
         $client->shouldReceive('fetch')->andReturn($document);
 
-        return new PartnerService($this->partners, $client, $this->logger);
+        return new PartnerService($this->partners, $client, $this->logger, $this->copies, self::OWN_DOMAIN);
     }
 
     /**
@@ -104,6 +110,74 @@ final class PartnerServiceTest extends TestCase
         $service->add('broker.example');
     }
 
+    public function testAddRefusesTheNodesOwnDomainBeforeAnyFetch(): void
+    {
+        // Partnering with itself would fetch its own well-known document,
+        // pin its own key and sync its own listings back as partner copies.
+        $client = Mockery::mock(WellKnownClient::class);
+        $client->shouldNotReceive('fetch');
+        $service = new PartnerService($this->partners, $client, $this->logger, $this->copies, self::OWN_DOMAIN);
+
+        try {
+            $service->add(' Node.TEST ');
+            self::fail('own domain accepted');
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('own identity domain', $exception->getMessage());
+        }
+
+        self::assertNull($this->partners->findByDomain(self::OWN_DOMAIN));
+        self::assertSame([], $this->logger->entries, 'nothing logged for a refused add');
+    }
+
+    public function testOutOfBandRegistrationRefusesTheNodesOwnDomain(): void
+    {
+        $keypair = sodium_crypto_sign_keypair();
+        $service = new PartnerService($this->partners, Mockery::mock(WellKnownClient::class), $this->logger, $this->copies, self::OWN_DOMAIN);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessageMatches('/own identity domain/');
+
+        $service->addWithKey(self::OWN_DOMAIN, base64_encode(sodium_crypto_sign_publickey($keypair)));
+    }
+
+    public function testRemoveDeletesAPartnerNothingWasReceivedFrom(): void
+    {
+        Functions\when('do_action')->justReturn(null);
+        $service = $this->service($this->wellKnown());
+        $partner = $service->add('mistake.example');
+
+        self::assertTrue($service->isRemovable($partner));
+
+        $service->remove($partner);
+
+        self::assertNull($this->partners->findByDomain('mistake.example'));
+        $removal = array_values(array_filter($this->logger->entries, static fn (array $entry): bool => $entry['outcome'] === 'partner_removed'));
+        self::assertCount(1, $removal);
+        self::assertSame(['domain' => 'mistake.example', 'trust_level' => 'provisional'], $removal[0]['context']);
+    }
+
+    #[Group('ID-3')]
+    public function testRemoveIsRefusedOnceListingsHaveBeenReceived(): void
+    {
+        // The partner row is the provenance anchor for every copy: the
+        // partnership then ends by blocking, never by deletion.
+        Functions\when('do_action')->justReturn(null);
+        $service = $this->service($this->wellKnown());
+        $partner = $service->add('authority.example');
+        $this->copies->upsert($partner, 'https://authority.example/openyacht/v1/listings/aaa', ['type' => 'sale', 'status' => 'active']);
+
+        self::assertFalse($service->isRemovable($partner));
+
+        try {
+            $service->remove($partner);
+            self::fail('removal accepted with copies present');
+        } catch (RuntimeException $exception) {
+            self::assertStringContainsString('block it instead', $exception->getMessage());
+        }
+
+        self::assertNotNull($this->partners->findByDomain('authority.example'), 'the partner row survives');
+    }
+
     #[Group('FP-12')]
     public function testOutOfBandRegistrationPinsTheDerivedKeyId(): void
     {
@@ -111,7 +185,7 @@ final class PartnerServiceTest extends TestCase
         $publicKey = base64_encode(sodium_crypto_sign_publickey($keypair));
         $expectedKeyId = substr(hash('sha256', sodium_crypto_sign_publickey($keypair)), 0, 16);
 
-        $service = new PartnerService($this->partners, Mockery::mock(WellKnownClient::class), $this->logger);
+        $service = new PartnerService($this->partners, Mockery::mock(WellKnownClient::class), $this->logger, $this->copies, self::OWN_DOMAIN);
         $partner = $service->addWithKey('ref-app.test', $publicKey, 'bbbbbbbb-1111-2222-3333-444444444444');
 
         self::assertSame($expectedKeyId, $partner->pinnedKeyId);
@@ -121,7 +195,7 @@ final class PartnerServiceTest extends TestCase
 
     public function testOutOfBandRegistrationRejectsAMalformedKey(): void
     {
-        $service = new PartnerService($this->partners, Mockery::mock(WellKnownClient::class), $this->logger);
+        $service = new PartnerService($this->partners, Mockery::mock(WellKnownClient::class), $this->logger, $this->copies, self::OWN_DOMAIN);
 
         $this->expectException(RuntimeException::class);
 

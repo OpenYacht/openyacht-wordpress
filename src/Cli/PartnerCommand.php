@@ -14,7 +14,7 @@ use Throwable;
 use WP_CLI;
 
 /**
- * Partner lifecycle: `wp openyacht partner <add|list|approve|block|refresh-keys>`.
+ * Partner lifecycle: `wp openyacht partner <add|list|approve|block|remove|refresh-keys>`.
  */
 final class PartnerCommand
 {
@@ -121,6 +121,32 @@ final class PartnerCommand
         Services::partnerService()->block($partner);
 
         WP_CLI::success("Partner {$partner->domain} blocked.");
+    }
+
+    /**
+     * Remove a partner nothing has been received from — the undo for a
+     * mistaken add. Once listings have been received the partner row is
+     * their provenance anchor (ID-3): block it instead.
+     *
+     * ## OPTIONS
+     *
+     * <domain>
+     * : The partner's domain.
+     *
+     * @param array<int, string> $args
+     * @param array<string, string> $assocArgs
+     */
+    public function remove(array $args, array $assocArgs): void
+    {
+        $partner = $this->find($args[0]);
+
+        try {
+            Services::partnerService()->remove($partner);
+
+            WP_CLI::success("Partner {$partner->domain} removed. If it polls again it reappears as a new provisional partner.");
+        } catch (Throwable $exception) {
+            WP_CLI::error($exception->getMessage());
+        }
     }
 
     /**

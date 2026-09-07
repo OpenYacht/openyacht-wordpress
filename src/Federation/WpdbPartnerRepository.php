@@ -88,6 +88,18 @@ final class WpdbPartnerRepository implements PartnerRepository
         ));
     }
 
+    public function delete(int $id): void
+    {
+        $schema = new Schema($this->wpdb);
+
+        $this->wpdb->delete($this->table(), ['id' => $id]);
+        $this->wpdb->delete($schema->tableName('listing_audience'), ['partner_id' => $id]);
+        $this->wpdb->delete($schema->tableName('partner_group_members'), ['partner_id' => $id]);
+        // The visibility log is append-only by design and carries no
+        // foreign key, so its rows go explicitly.
+        $this->wpdb->delete($schema->tableName('visibility_events'), ['partner_id' => $id]);
+    }
+
     /**
      * @param array<string, mixed> $columns
      * @return array<string, mixed>

@@ -35,4 +35,12 @@ interface PartnerRepository
     public function update(int $id, array $columns): void;
 
     public function incrementFailures(int $id): void;
+
+    /**
+     * Delete the partner and every row that hangs off it: audience
+     * selections, group memberships and visibility events. Callers gate on
+     * PartnerService::isRemovable() — copies are never cascaded. Log rows
+     * keep their partner_id on purpose (the audit trail survives).
+     */
+    public function delete(int $id): void;
 }
