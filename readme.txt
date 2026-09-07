@@ -4,7 +4,7 @@ Tags: yacht, listings, federation, brokerage, charter
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.5.1
+Stable tag: 0.6.0
 License: AGPL-3.0-only
 License URI: https://www.gnu.org/licenses/agpl-3.0.html
 
@@ -57,6 +57,19 @@ Multisite is not a supported configuration. A node's identity is one domain with
 No. New listings are created as drafts, publishing is an explicit transition, and every listing carries its own audience setting. Partnering with a node carries no obligation to import anything from it either.
 
 == Changelog ==
+
+= 0.6.0 =
+
+Partner lifecycle fixes, the charter follow-ups from the reference-app port review, and a builder registry refresh. No database change; the wire changes only for charter listings and for the capabilities document.
+
+* A node can no longer partner with itself. The site's own identity domain is refused on the Partners screen, in `wp openyacht partner add`, and for an inbound request claiming to be this site, which previously could have been auto-registered as a provisional self-partner.
+* New Remove action for a partner nothing has been received from, on the Partners screen and as `wp openyacht partner remove`. It is the undo for a mistaken add: once listings have arrived the partner row is their provenance record, and the partnership ends by blocking as before.
+* A partner that has not approved this site yet no longer counts as a sync failure. Polling it used to trigger the failure backoff, so approval on their side could go unnoticed for hours; polls now continue hourly and the Sync now action, the CLI and the Activity log say the partner is awaiting approval.
+* The capabilities document advertises `charter_listings: true`. The node has served charter listings with a charter block since 0.4.0; the flag describes the schema support, not the inventory.
+* Charter listings on the wire: `charter.rates` is withheld for partners without the pricing field group, and price history is never emitted for charter listings.
+* A charter payload sent to the wire-shaped ingest was stored as a sale listing; the type now follows the payload. Editing a charter listing validated it against the sale branch of the schema; the revision is pinned to the stored type.
+* Synced-listings screens: a charter rate card mixing currencies shows the first currency's range instead of a mislabelled blend, daily rates read "/ day", and the preview page shows a dash instead of a stray placeholder when a listing has no price.
+* Vendored builder registry updated to 2026.09.0: 23 yards added (Admiral Marine, Aegean Yachts, Anastassiades & Tsortanides, Bruckmann, CH Marine, Fjord, Italcraft, MetalCraft, New England Boatworks, Novurania, Outer Reef Yachts, Palm Beach Motor Yachts, Pendennis, Rand, Rayburn Custom Yachts, Royal Hakvoort, Timmerman, Tureddi, Vitruvius Yachts, Walker Bay, Westship, Wicks Bros., Wider) and the country filled in on 22 existing entries. The builder picker offers the new yards and incoming payloads carrying their slugs now validate; existing listings are untouched until next saved.
 
 = 0.5.1 =
 
