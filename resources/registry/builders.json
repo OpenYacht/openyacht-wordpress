@@ -1,6 +1,6 @@
 {
 	"registry": "openyacht-builders",
-	"version": "2026.08.0",
+	"version": "2026.09.0",
 	"canonical_url": "https://openyacht.org/registry/builders.json",
 	"notes": "Fixed manufacturer vocabulary for the OpenYacht protocol: the set list both authorities and consumers validate builder slugs against. Versioned like tzdata: consumers vendor a copy and update out-of-band; never fetched at request time. Additions via pull request to the spec repository. This list is intentionally alias-free — normalising dirty source data is an import concern; alias mappings are a non-normative import aid maintained outside this repository.",
 	"builders": [
@@ -23,6 +23,16 @@
 			"slug": "admiral",
 			"name": "Admiral",
 			"country": "Italy"
+		},
+		{
+			"slug": "admiral-marine",
+			"name": "Admiral Marine",
+			"country": "United States"
+		},
+		{
+			"slug": "aegean-yachts",
+			"name": "Aegean Yachts",
+			"country": "Turkey"
 		},
 		{
 			"slug": "aicon",
@@ -68,6 +78,11 @@
 			"slug": "american-tug",
 			"name": "American Tug",
 			"country": "United States"
+		},
+		{
+			"slug": "anastassiades-tsortanides",
+			"name": "Anastassiades & Tsortanides",
+			"country": "Greece"
 		},
 		{
 			"slug": "apreamare",
@@ -240,6 +255,11 @@
 			"country": "United States"
 		},
 		{
+			"slug": "bruckmann",
+			"name": "Bruckmann",
+			"country": "Canada"
+		},
+		{
 			"slug": "buddy-davis",
 			"name": "Buddy Davis",
 			"country": null
@@ -272,7 +292,7 @@
 		{
 			"slug": "canados",
 			"name": "Canados",
-			"country": null
+			"country": "Italy"
 		},
 		{
 			"slug": "cape-dory",
@@ -330,6 +350,11 @@
 			"country": null
 		},
 		{
+			"slug": "ch-marine",
+			"name": "CH Marine",
+			"country": null
+		},
+		{
 			"slug": "chaparral",
 			"name": "Chaparral",
 			"country": null
@@ -337,7 +362,7 @@
 		{
 			"slug": "cheoy-lee",
 			"name": "Cheoy Lee",
-			"country": null
+			"country": "Hong Kong"
 		},
 		{
 			"slug": "cherubini",
@@ -402,12 +427,12 @@
 		{
 			"slug": "crescent",
 			"name": "Crescent",
-			"country": null
+			"country": "Canada"
 		},
 		{
 			"slug": "crn",
 			"name": "CRN",
-			"country": null
+			"country": "Italy"
 		},
 		{
 			"slug": "crownline",
@@ -477,7 +502,7 @@
 		{
 			"slug": "dyer",
 			"name": "Dyer",
-			"country": null
+			"country": "United States"
 		},
 		{
 			"slug": "dynamiq",
@@ -573,6 +598,11 @@
 			"slug": "fishing-raptor",
 			"name": "Fishing Raptor",
 			"country": null
+		},
+		{
+			"slug": "fjord",
+			"name": "Fjord",
+			"country": "Germany"
 		},
 		{
 			"slug": "fleming",
@@ -742,7 +772,7 @@
 		{
 			"slug": "horizon",
 			"name": "Horizon",
-			"country": null
+			"country": "Taiwan"
 		},
 		{
 			"slug": "huckins",
@@ -802,7 +832,7 @@
 		{
 			"slug": "invincible",
 			"name": "Invincible",
-			"country": null
+			"country": "United States"
 		},
 		{
 			"slug": "isa-yachts",
@@ -818,6 +848,11 @@
 			"slug": "islander",
 			"name": "Islander",
 			"country": null
+		},
+		{
+			"slug": "italcraft",
+			"name": "Italcraft",
+			"country": "Italy"
 		},
 		{
 			"slug": "itama",
@@ -892,7 +927,7 @@
 		{
 			"slug": "lazzara",
 			"name": "Lazzara",
-			"country": null
+			"country": "United States"
 		},
 		{
 			"slug": "lecomte",
@@ -1060,6 +1095,11 @@
 			"country": null
 		},
 		{
+			"slug": "metalcraft",
+			"name": "MetalCraft",
+			"country": "Canada"
+		},
+		{
 			"slug": "midnight-express",
 			"name": "Midnight Express",
 			"country": null
@@ -1067,7 +1107,7 @@
 		{
 			"slug": "mjm",
 			"name": "MJM",
-			"country": null
+			"country": "United States"
 		},
 		{
 			"slug": "monk",
@@ -1118,6 +1158,11 @@
 			"slug": "neptunus",
 			"name": "Neptunus",
 			"country": "Netherlands"
+		},
+		{
+			"slug": "new-england-boatworks",
+			"name": "New England Boatworks",
+			"country": "United States"
 		},
 		{
 			"slug": "new-harbor-boats",
@@ -1172,6 +1217,11 @@
 		{
 			"slug": "northstar",
 			"name": "Northstar",
+			"country": null
+		},
+		{
+			"slug": "novurania",
+			"name": "Novurania",
 			"country": null
 		},
 		{
@@ -1240,6 +1290,11 @@
 			"country": null
 		},
 		{
+			"slug": "outer-reef-yachts",
+			"name": "Outer Reef Yachts",
+			"country": "United States"
+		},
+		{
 			"slug": "outremer",
 			"name": "Outremer",
 			"country": null
@@ -1252,12 +1307,17 @@
 		{
 			"slug": "pacific-mariner",
 			"name": "Pacific Mariner",
-			"country": null
+			"country": "United States"
 		},
 		{
 			"slug": "pacific-seacraft",
 			"name": "Pacific Seacraft",
 			"country": null
+		},
+		{
+			"slug": "palm-beach-motor-yachts",
+			"name": "Palm Beach Motor Yachts",
+			"country": "Australia"
 		},
 		{
 			"slug": "palmer-johnson",
@@ -1277,7 +1337,7 @@
 		{
 			"slug": "passport",
 			"name": "Passport",
-			"country": null
+			"country": "United States"
 		},
 		{
 			"slug": "pathfinder",
@@ -1293,6 +1353,11 @@
 			"slug": "pearson",
 			"name": "Pearson",
 			"country": null
+		},
+		{
+			"slug": "pendennis",
+			"name": "Pendennis",
+			"country": "United Kingdom"
 		},
 		{
 			"slug": "pershing",
@@ -1350,6 +1415,11 @@
 			"country": null
 		},
 		{
+			"slug": "rand",
+			"name": "Rand",
+			"country": "Denmark"
+		},
+		{
 			"slug": "ranger",
 			"name": "Ranger",
 			"country": null
@@ -1357,7 +1427,12 @@
 		{
 			"slug": "ranger-tugs",
 			"name": "Ranger Tugs",
-			"country": null
+			"country": "United States"
+		},
+		{
+			"slug": "rayburn-custom-yachts",
+			"name": "Rayburn Custom Yachts",
+			"country": "Canada"
 		},
 		{
 			"slug": "real",
@@ -1372,7 +1447,7 @@
 		{
 			"slug": "regal",
 			"name": "Regal",
-			"country": null
+			"country": "United States"
 		},
 		{
 			"slug": "regulator",
@@ -1405,6 +1480,11 @@
 			"country": "United States"
 		},
 		{
+			"slug": "royal-hakvoort",
+			"name": "Royal Hakvoort",
+			"country": "Netherlands"
+		},
+		{
 			"slug": "rybovich",
 			"name": "Rybovich",
 			"country": null
@@ -1422,7 +1502,7 @@
 		{
 			"slug": "sacs",
 			"name": "SACS",
-			"country": null
+			"country": "Italy"
 		},
 		{
 			"slug": "saga",
@@ -1467,7 +1547,7 @@
 		{
 			"slug": "scout",
 			"name": "Scout",
-			"country": null
+			"country": "United States"
 		},
 		{
 			"slug": "sea-chaser",
@@ -1597,7 +1677,7 @@
 		{
 			"slug": "sunreef-yachts",
 			"name": "Sunreef Yachts",
-			"country": null
+			"country": "Poland"
 		},
 		{
 			"slug": "sunsation",
@@ -1617,7 +1697,7 @@
 		{
 			"slug": "symbol",
 			"name": "Symbol",
-			"country": null
+			"country": "Taiwan"
 		},
 		{
 			"slug": "tartan",
@@ -1632,7 +1712,7 @@
 		{
 			"slug": "tiara-yachts",
 			"name": "Tiara Yachts",
-			"country": null
+			"country": "United States"
 		},
 		{
 			"slug": "tidewater",
@@ -1640,9 +1720,14 @@
 			"country": null
 		},
 		{
+			"slug": "timmerman",
+			"name": "Timmerman",
+			"country": "Russia"
+		},
+		{
 			"slug": "tollycraft",
 			"name": "Tollycraft",
-			"country": null
+			"country": "United States"
 		},
 		{
 			"slug": "topaz",
@@ -1667,6 +1752,11 @@
 		{
 			"slug": "trumpy",
 			"name": "Trumpy",
+			"country": null
+		},
+		{
+			"slug": "tureddi",
+			"name": "Tureddi",
 			"country": null
 		},
 		{
@@ -1702,7 +1792,7 @@
 		{
 			"slug": "vicem",
 			"name": "Vicem",
-			"country": null
+			"country": "Turkey"
 		},
 		{
 			"slug": "viking",
@@ -1720,6 +1810,11 @@
 			"country": null
 		},
 		{
+			"slug": "vitruvius-yachts",
+			"name": "Vitruvius Yachts",
+			"country": null
+		},
+		{
 			"slug": "voyage-yachts",
 			"name": "Voyage Yachts",
 			"country": null
@@ -1728,6 +1823,11 @@
 			"slug": "wajer",
 			"name": "Wajer",
 			"country": null
+		},
+		{
+			"slug": "walker-bay",
+			"name": "Walker Bay",
+			"country": "United States"
 		},
 		{
 			"slug": "wally",
@@ -1760,6 +1860,21 @@
 			"country": "United States"
 		},
 		{
+			"slug": "westship",
+			"name": "Westship",
+			"country": "United States"
+		},
+		{
+			"slug": "wicks-bros",
+			"name": "Wicks Bros.",
+			"country": null
+		},
+		{
+			"slug": "wider",
+			"name": "Wider",
+			"country": "Italy"
+		},
+		{
 			"slug": "williams-jet-tenders",
 			"name": "Williams Jet Tenders",
 			"country": null
@@ -1777,12 +1892,12 @@
 		{
 			"slug": "yamaha-boats",
 			"name": "Yamaha Boats",
-			"country": null
+			"country": "Japan"
 		},
 		{
 			"slug": "yellowfin",
 			"name": "Yellowfin",
-			"country": null
+			"country": "United States"
 		},
 		{
 			"slug": "zeelander",
