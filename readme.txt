@@ -58,6 +58,16 @@ No. New listings are created as drafts, publishing is an explicit transition, an
 
 == Changelog ==
 
+= 0.7.0 =
+
+The partnership request the protocol describes, and push subscriptions. Schema v10: new columns on the partners table and a push delivery queue table; the wire gains the optional `subscriptions` endpoints and `features.subscriptions` in capabilities only when the new setting is on.
+
+* Adding a partner now introduces this site to it with a signed partnership request carrying a message and a contact email (both editable on the add form, with sensible defaults), so the partnership shows up on their side, with who is asking and why, before any sync poll happens to arrive. Nodes without the endpoint are probed with a signed listings read instead. The result is reported as delivered, already verified, blocked or not delivered; a Send/Resend partnership request row action and `wp openyacht partner introduce` re-send it.
+* Received partnership requests are stored on the partner row and shown under the domain on the Partners screen, next to Approve, and included in the first-contact email; a partner already known here that sends one gets its own email. The endpoint no longer rejects a request missing the message or contact after already registering the sender.
+* Push subscriptions (optional protocol feature): with "Offer push subscriptions" on in Settings, verified partners can register a callback and receive every change as a signed POST instead of waiting for their next poll; deliveries retry with exponential backoff for up to 24 hours from wp-cron, so the setting needs a real system cron. On the consumer side, "Subscribe to pushes" on the Partners screen (or `wp openyacht partner subscribe`) registers this site's inbox with a partner that offers the feature; subscribed partners are polled once a day to reconcile. `wp openyacht push list` and `wp openyacht push deliver` inspect and run the delivery queue.
+* Unknown HTTP methods on the federation endpoints answer 405 with an Allow header instead of 404.
+* Internal: a listing's visibility events are recorded only after the audience change they describe has been applied.
+
 = 0.6.0 =
 
 Partner lifecycle fixes, the charter follow-ups from the reference-app port review, and a builder registry refresh. No database change; the wire changes only for charter listings and for the capabilities document.
