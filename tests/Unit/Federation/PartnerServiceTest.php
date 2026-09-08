@@ -7,10 +7,14 @@ namespace OpenYacht\Tests\Unit\Federation;
 use Brain\Monkey\Actions;
 use Brain\Monkey\Functions;
 use Mockery;
+use OpenYacht\Federation\IntroductionOutcome;
+use OpenYacht\Federation\Partner;
 use OpenYacht\Federation\PartnerService;
+use OpenYacht\Federation\TransportException;
 use OpenYacht\Federation\TrustLevel;
 use OpenYacht\Federation\WellKnownClient;
 use OpenYacht\Tests\Support\CollectingLogger;
+use OpenYacht\Tests\Support\FakeFederationClient;
 use OpenYacht\Tests\Support\InMemoryCopyRepository;
 use OpenYacht\Tests\Support\InMemoryPartnerRepository;
 use OpenYacht\Tests\Unit\TestCase;
@@ -263,6 +267,189 @@ final class PartnerServiceTest extends TestCase
         self::assertSame(TrustLevel::Verified, $refreshed->trustLevel);
         self::assertSame(7, $refreshed->approvedByUserId);
         self::assertNotNull($refreshed->keysFetchedAt);
+    }
+
+    /**
+     * A service wired for the outbound partnership request: the node is
+     * called "Test Node" and its admin email is admin@node.test.
+     */
+    private function introducer(FakeFederationClient $client): PartnerService
+    {
+        Functions\stubTranslationFunctions();
+        Functions\when('get_bloginfo')->justReturn('Test Node');
+        Functions\when('get_option')->alias(static fn (string $key, mixed $default = false): mixed => $key === 'admin_email' ? 'admin@node.test' : $default);
+
+        return new PartnerService($this->partners, Mockery::mock(WellKnownClient::class), $this->logger, $this->copies, self::OWN_DOMAIN, $client);
+    }
+
+    private function storedPartner(string $domain = 'partner.example'): Partner
+    {
+        return $this->partners->insert(['domain' => $domain, 'trust_level' => TrustLevel::Provisional]);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function sentRequest(): ?array
+    {
+        $entries = array_values(array_filter($this->logger->entries, static fn (array $entry): bool => $entry['outcome'] === 'partner_request_sent'));
+
+        return $entries[0] ?? null;
+    }
+
+    #[Group('FP-13')]
+    public function testIntroduceSendsBothFieldsWithDefaultsAndStampsTheRequest(): void
+    {
+        // Lifecycle step 1: the signed request carries a message and a
+        // contact so the approving human over there gets "who and why".
+        // Both fields always go out — a receiver may reject a body
+        // missing either after it has already registered the sender.
+        $client = new FakeFederationClient();
+        $client->queueJson(['status' => 'received', 'trust_level' => 'provisional'], 202);
+        $partner = $this->storedPartner();
+
+        $introduction = $this->introducer($client)->introduce($partner);
+
+        self::assertSame(IntroductionOutcome::Delivered, $introduction->outcome);
+        self::assertSame([[
+            'method' => 'POST',
+            'path' => '/openyacht/v1/partners/request',
+            'payload' => [
+                'message' => 'Test Node would like to federate listings with you via OpenYacht.',
+                'contact_email' => 'admin@node.test',
+            ],
+        ]], $client->requests);
+        self::assertNotNull($this->partners->find($partner->id)?->requestSentAt, 'a delivered request is stamped');
+        self::assertSame('delivered', $this->sentRequest()['context']['outcome'] ?? null);
+    }
+
+    public function testIntroduceSendsTheOperatorsOwnMessageAndContact(): void
+    {
+        $client = new FakeFederationClient();
+        $client->queueJson(['status' => 'received', 'trust_level' => 'provisional'], 202);
+
+        $this->introducer($client)->introduce($this->storedPartner(), '  We list in Palm Beach and would like to share.  ', ' sales@node.test ');
+
+        self::assertSame(
+            ['message' => 'We list in Palm Beach and would like to share.', 'contact_email' => 'sales@node.test'],
+            $client->requests[0]['payload'],
+        );
+    }
+
+    #[Group('FP-13')]
+    public function testIntroduceReportsAcceptedWhenTheyAlreadyVerifiedThisNode(): void
+    {
+        $client = new FakeFederationClient();
+        $client->queueJson(['status' => 'received', 'trust_level' => 'verified'], 202);
+        $partner = $this->storedPartner();
+
+        $introduction = $this->introducer($client)->introduce($partner);
+
+        self::assertSame(IntroductionOutcome::Accepted, $introduction->outcome);
+        self::assertNotNull($this->partners->find($partner->id)?->requestSentAt);
+    }
+
+    #[Group('FP-13')]
+    public function testIntroduceFallsBackToAListingsProbeWhenTheEndpointIsMissing(): void
+    {
+        // A node without the endpoint answers 404 from its router before
+        // any signature check, so nothing was registered there. A signed
+        // listings read is authenticated on every conformant node; a page
+        // of listings back means they already trust us (only verified
+        // partners are served), not "awaiting approval".
+        $client = new FakeFederationClient();
+        $client->queueJson(['error' => ['code' => 'NOT_FOUND', 'message' => 'Unknown federation endpoint.']], 404);
+        $client->queueJson(['data' => [], 'meta' => ['generated_at' => '2026-09-08T10:00:00Z']], 200);
+        $partner = $this->storedPartner();
+
+        $introduction = $this->introducer($client)->introduce($partner);
+
+        self::assertSame(IntroductionOutcome::Accepted, $introduction->outcome);
+        self::assertSame(['/openyacht/v1/partners/request', '/openyacht/v1/listings?page_size=1'], $client->requestedPaths);
+        self::assertNotNull($this->partners->find($partner->id)?->requestSentAt);
+    }
+
+    #[Group('FP-13')]
+    public function testProbeAnsweredProvisionalIsDelivered(): void
+    {
+        $client = new FakeFederationClient();
+        $client->queueJson([], 405);
+        $client->queueJson(['error' => ['code' => 'PARTNER_PROVISIONAL', 'message' => 'pending']], 403);
+
+        $introduction = $this->introducer($client)->introduce($this->storedPartner());
+
+        self::assertSame(IntroductionOutcome::Delivered, $introduction->outcome);
+    }
+
+    #[Group('FP-9')]
+    public function testIntroduceReportsBlockedWithoutStampingTheRequest(): void
+    {
+        $client = new FakeFederationClient();
+        $client->queueJson(['error' => ['code' => 'PARTNER_BLOCKED', 'message' => 'blocked']], 403);
+        $partner = $this->storedPartner();
+
+        $introduction = $this->introducer($client)->introduce($partner);
+
+        self::assertSame(IntroductionOutcome::Blocked, $introduction->outcome);
+        self::assertNull($this->partners->find($partner->id)?->requestSentAt, 'a blocked request never reached a human');
+    }
+
+    public function testAnUnreachablePartnerIsReportedNotThrown(): void
+    {
+        // The partner row is saved before the attempt, so every outcome
+        // is something the operator reads, never an exception that undoes
+        // the add.
+        $client = new FakeFederationClient();
+        $client->queueFailure(new TransportException('Request to partner.example/openyacht/v1/partners/request failed: cURL error 6: Could not resolve host'));
+        $partner = $this->storedPartner();
+
+        $introduction = $this->introducer($client)->introduce($partner);
+
+        self::assertSame(IntroductionOutcome::Failed, $introduction->outcome);
+        self::assertStringContainsString('Could not resolve host', $introduction->detail);
+        self::assertNull($this->partners->find($partner->id)?->requestSentAt);
+        self::assertSame('failed', $this->sentRequest()['context']['outcome'] ?? null, 'the failure is in the activity log');
+    }
+
+    public function testAnUnexpectedAnswerIsFailedWithTheStatusInTheDetail(): void
+    {
+        $client = new FakeFederationClient();
+        $client->queueJson(['error' => ['code' => 'RATE_LIMITED', 'message' => 'slow down']], 429);
+
+        $introduction = $this->introducer($client)->introduce($this->storedPartner());
+
+        self::assertSame(IntroductionOutcome::Failed, $introduction->outcome);
+        self::assertSame('unexpected answer HTTP 429 RATE_LIMITED', $introduction->detail);
+    }
+
+    #[Group('FP-13')]
+    public function testRecordRequestStoresTheSendersMessageAndContactOnTheRow(): void
+    {
+        // The receiving side: what the partner wrote is what the person
+        // approving it decides on, so it lives on the row, not only in a
+        // log nobody reads before clicking Approve.
+        $service = $this->service($this->wellKnown());
+        $partner = $this->storedPartner('asker.example');
+
+        $recorded = $service->recordRequest($partner, '  Hello from Asker.  ', ' hello@asker.example ');
+
+        self::assertSame('Hello from Asker.', $recorded->requestMessage);
+        self::assertSame('hello@asker.example', $recorded->requestContactEmail);
+        self::assertNotNull($recorded->requestedAt);
+        self::assertNotEmpty(array_filter($this->logger->entries, static fn (array $entry): bool => $entry['outcome'] === 'partner_request_received'));
+    }
+
+    public function testRecordRequestIsLenientAboutMissingFields(): void
+    {
+        // A sender that omits a field has still introduced itself.
+        $service = $this->service($this->wellKnown());
+        $partner = $this->storedPartner('terse.example');
+
+        $recorded = $service->recordRequest($partner, null, '');
+
+        self::assertNull($recorded->requestMessage);
+        self::assertNull($recorded->requestContactEmail);
+        self::assertNotNull($recorded->requestedAt);
     }
 
     #[Group('FP-13')]

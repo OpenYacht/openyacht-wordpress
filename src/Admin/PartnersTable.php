@@ -73,6 +73,18 @@ final class PartnersTable extends \WP_List_Table
 
         $actions['refresh'] = $this->actionButton($item, 'refresh', __('Refresh keys', 'openyacht'));
 
+        // Lifecycle step 1, on demand: a partner added before the sender
+        // existed, or one whose administrators need asking again.
+        if ($item->trustLevel !== TrustLevel::Blocked) {
+            $actions['introduce'] = $this->actionButton(
+                $item,
+                'introduce',
+                $item->requestSentAt === null
+                    ? __('Send partnership request', 'openyacht')
+                    : __('Resend partnership request', 'openyacht'),
+            );
+        }
+
         // Undo for a mistaken add: only while nothing has been received —
         // once copies exist the row is their provenance anchor and Block
         // is how a partnership ends.
@@ -92,14 +104,48 @@ final class PartnersTable extends \WP_List_Table
         );
         $actions['grants'] = '<a href="' . esc_url($grantsUrl) . '">' . esc_html__('Sharing', 'openyacht') . '</a>';
 
-        $pinned = '';
+        $notes = '';
 
         if ($item->pinnedKeyId !== null) {
             /* translators: %s: the partner's pinned signing key ID */
-            $pinned = '<br><span class="description">' . esc_html(sprintf(__('Pinned key: %s', 'openyacht'), $item->pinnedKeyId)) . '</span>';
+            $notes .= '<br><span class="description">' . esc_html(sprintf(__('Pinned key: %s', 'openyacht'), $item->pinnedKeyId)) . '</span>';
         }
 
-        return '<strong>' . esc_html($item->domain) . '</strong>' . $pinned . $this->row_actions($actions);
+        if ($item->requestSentAt !== null) {
+            /* translators: %s: UTC datetime the partnership request reached the partner. */
+            $notes .= '<br><span class="description">' . esc_html(sprintf(__('Partnership request sent %s UTC', 'openyacht'), $item->requestSentAt)) . '</span>';
+        }
+
+        return '<strong>' . esc_html($item->domain) . '</strong>' . $notes . $this->receivedRequest($item) . $this->row_actions($actions);
+    }
+
+    /**
+     * The partner's own introduction — what the approve/block decision is
+     * made on (FP-13) — shown right where that decision is taken.
+     */
+    private function receivedRequest(Partner $partner): string
+    {
+        if ($partner->requestedAt === null) {
+            return '';
+        }
+
+        $html = '<div style="margin:6px 0 2px;padding:6px 10px;border-left:4px solid #72aee6;background:#f0f6fc;max-width:520px;">'
+            /* translators: %s: UTC datetime the partner's request arrived. */
+            . '<strong>' . esc_html(sprintf(__('Requested partnership %s UTC', 'openyacht'), $partner->requestedAt)) . '</strong>';
+
+        if ($partner->requestMessage !== null) {
+            $html .= '<br>' . esc_html($partner->requestMessage);
+        }
+
+        if ($partner->requestContactEmail !== null) {
+            $contact = is_email($partner->requestContactEmail)
+                ? '<a href="' . esc_url('mailto:' . $partner->requestContactEmail) . '">' . esc_html($partner->requestContactEmail) . '</a>'
+                : esc_html($partner->requestContactEmail);
+            /* translators: %s: the partner's contact email (HTML). */
+            $html .= '<br><span class="description">' . sprintf(esc_html__('Contact: %s', 'openyacht'), $contact) . '</span>';
+        }
+
+        return $html . '</div>';
     }
 
     /**

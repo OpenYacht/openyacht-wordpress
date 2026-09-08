@@ -8,19 +8,23 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
+use OpenYacht\Federation\IntroductionOutcome;
 use OpenYacht\Federation\Partner;
+use OpenYacht\Federation\PartnerIntroduction;
+use OpenYacht\Federation\TrustLevel;
 use OpenYacht\Services;
 use Throwable;
 use WP_CLI;
 
 /**
- * Partner lifecycle: `wp openyacht partner <add|list|approve|block|remove|refresh-keys>`.
+ * Partner lifecycle: `wp openyacht partner <add|list|approve|block|remove|refresh-keys|introduce>`.
  */
 final class PartnerCommand
 {
     /**
      * Register a partner node by domain (TOFU: fetches its well-known
-     * document over verified TLS; the partner starts provisional).
+     * document over verified TLS; the partner starts provisional), then
+     * introduce this node to it with a signed partnership request.
      *
      * ## OPTIONS
      *
@@ -35,9 +39,16 @@ final class PartnerCommand
      * [--node-uuid=<uuid>]
      * : With --public-key: the partner's node UUID, if known.
      *
+     * [--message=<text>]
+     * : Sent with the partnership request to the partner's administrators.
+     * Defaults to a one-line introduction naming this node.
+     *
+     * [--contact-email=<email>]
+     * : How their administrator can reply. Defaults to the site admin email.
+     *
      * ## EXAMPLES
      *
-     *     wp openyacht partner add broker.example
+     *     wp openyacht partner add broker.example --message="We list in Palm Beach and would like to share."
      *     wp openyacht partner add ref-app.test --public-key="QKcw...Ac="
      *
      * @param array<int, string> $args
@@ -53,11 +64,71 @@ final class PartnerCommand
                     isset($assocArgs['node-uuid']) ? (string) $assocArgs['node-uuid'] : null,
                 )
                 : Services::partnerService()->add($args[0]);
-
-            WP_CLI::success("Partner {$partner->domain} added as {$partner->trustLevel->value}. Approve with: wp openyacht partner approve {$partner->domain}");
         } catch (Throwable $exception) {
             WP_CLI::error($exception->getMessage());
+
+            return;
         }
+
+        WP_CLI::success("Partner {$partner->domain} added as {$partner->trustLevel->value}. Approve with: wp openyacht partner approve {$partner->domain}");
+
+        // The row is saved whatever comes back: a failed introduction is a
+        // warning about the other side, not a failed add.
+        $this->reportIntroduction($partner, Services::partnerService()->introduce(
+            $partner,
+            isset($assocArgs['message']) ? (string) $assocArgs['message'] : null,
+            isset($assocArgs['contact-email']) ? (string) $assocArgs['contact-email'] : null,
+        ));
+    }
+
+    /**
+     * Send (or resend) the signed partnership request that introduces this
+     * node to a partner — federation-protocol.md §Partner Lifecycle step 1.
+     * Their node stores this site as a provisional partner and notifies
+     * its administrators, message and contact included.
+     *
+     * ## OPTIONS
+     *
+     * <domain>
+     * : The partner's domain.
+     *
+     * [--message=<text>]
+     * : Sent to the partner's administrators. Defaults to a one-line
+     * introduction naming this node.
+     *
+     * [--contact-email=<email>]
+     * : How their administrator can reply. Defaults to the site admin email.
+     *
+     * ## EXAMPLES
+     *
+     *     wp openyacht partner introduce broker.example
+     *
+     * @param array<int, string> $args
+     * @param array<string, string> $assocArgs
+     */
+    public function introduce(array $args, array $assocArgs): void
+    {
+        $partner = $this->find($args[0]);
+
+        if ($partner->trustLevel === TrustLevel::Blocked) {
+            WP_CLI::error("Partner {$partner->domain} is blocked here; approve it first if the partnership should resume.");
+        }
+
+        $this->reportIntroduction($partner, Services::partnerService()->introduce(
+            $partner,
+            isset($assocArgs['message']) ? (string) $assocArgs['message'] : null,
+            isset($assocArgs['contact-email']) ? (string) $assocArgs['contact-email'] : null,
+        ));
+    }
+
+    private function reportIntroduction(Partner $partner, PartnerIntroduction $introduction): void
+    {
+        match ($introduction->outcome) {
+            IntroductionOutcome::Delivered => WP_CLI::success("Partnership request delivered to {$partner->domain}: it appears there as a provisional partner until they approve it."),
+            IntroductionOutcome::Accepted => WP_CLI::success("{$partner->domain} already lists this node as a verified partner."),
+            IntroductionOutcome::Blocked => WP_CLI::warning("{$partner->domain} has blocked this node."),
+            IntroductionOutcome::Failed => WP_CLI::warning("Partnership request to {$partner->domain} not delivered: " . rtrim($introduction->detail, '.') . ". Resend with: wp openyacht partner introduce {$partner->domain}"),
+        };
     }
 
     /**

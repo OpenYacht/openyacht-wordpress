@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OpenYacht\Tests\Unit\Federation;
 
+use Brain\Monkey\Actions;
 use Brain\Monkey\Functions;
 use Mockery;
 use OpenYacht\Federation\ErrorCode;
@@ -173,6 +174,79 @@ final class InboundVerificationTest extends TestCase
 
         $allowed = $this->middleware()->authenticate($this->signedRequest(path: '/openyacht/v1/partners/request'));
         self::assertSame(ErrorCode::PartnerProvisional, $allowed->error);
+    }
+
+    #[Group('FP-13')]
+    public function testFirstContactActionIsLeftToACallerThatDefersItOnAVerifiedRequest(): void
+    {
+        // The partnership-request endpoint stores the sender's message
+        // first and fires the action itself, so the notification carries
+        // the message; the result tells it that it owes the action.
+        Actions\expectDone('openyacht_partner_first_contact')->never();
+        $this->wellKnown->shouldReceive('fetch')->andReturn($this->senderWellKnown());
+
+        $result = $this->middleware()->authenticate(
+            $this->signedRequest(path: '/openyacht/v1/partners/request'),
+            allowProvisional: true,
+            deferFirstContact: true,
+        );
+
+        self::assertTrue($result->verified());
+        self::assertTrue($result->firstContact);
+    }
+
+    #[Group('FP-13')]
+    public function testDeferredFirstContactStillFiresWhenTheRequestIsRejected(): void
+    {
+        // The sender was registered whatever the request's fate, so the
+        // administrator must still hear about it — a deferring caller
+        // never sees a rejected request, so it cannot fire it.
+        Actions\expectDone('openyacht_partner_first_contact')->once();
+        $this->wellKnown->shouldReceive('fetch')->andReturn($this->senderWellKnown());
+
+        // Signed with a key the sender's well-known does not publish.
+        $result = $this->middleware()->authenticate(
+            $this->signedRequest($this->makeKey(), '/openyacht/v1/partners/request'),
+            allowProvisional: true,
+            deferFirstContact: true,
+        );
+
+        self::assertFalse($result->verified());
+        self::assertNotNull($this->partners->findByDomain(self::SENDER), 'registered by trust on first use regardless');
+    }
+
+    #[Group('FP-13')]
+    public function testFirstContactFiresImmediatelyWhenNotDeferred(): void
+    {
+        Actions\expectDone('openyacht_partner_first_contact')->once();
+        $this->wellKnown->shouldReceive('fetch')->andReturn($this->senderWellKnown());
+
+        $result = $this->middleware()->authenticate($this->signedRequest(), allowProvisional: true);
+
+        self::assertTrue($result->verified());
+        self::assertTrue($result->firstContact);
+    }
+
+    public function testAKnownSenderIsNotFirstContact(): void
+    {
+        $this->storedPartner();
+
+        $result = $this->middleware()->authenticate($this->signedRequest());
+
+        self::assertTrue($result->verified());
+        self::assertFalse($result->firstContact);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function senderWellKnown(): array
+    {
+        return [
+            'openyacht' => '1.0',
+            'node' => ['uuid' => 'bbbbbbbb-1111-2222-3333-444444444444'],
+            'keys' => [['key_id' => $this->senderKey->keyId, 'public_key' => $this->senderKey->publicKey]],
+        ];
     }
 
     public function testProvisionalPartnerIsAllowedWhereExplicitlyPermitted(): void

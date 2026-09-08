@@ -22,6 +22,10 @@ final class Partner
     /**
      * @param list<array<string, mixed>>|null $keysJson
      * @param list<string>|null $fieldGroups
+     * @param string|null $requestSentAt when this node's partnership request last reached the partner
+     * @param string|null $requestMessage what the partner wrote when it introduced itself
+     * @param string|null $requestContactEmail how the partner said to reach it about the request
+     * @param string|null $requestedAt when the partner's request arrived
      */
     public function __construct(
         public readonly int $id,
@@ -38,6 +42,10 @@ final class Partner
         public readonly ?string $lastSyncedAt,
         public readonly ?string $lastAttemptedAt,
         public readonly SharingScope $sharingScope = SharingScope::Standard,
+        public readonly ?string $requestSentAt = null,
+        public readonly ?string $requestMessage = null,
+        public readonly ?string $requestContactEmail = null,
+        public readonly ?string $requestedAt = null,
     ) {
     }
 

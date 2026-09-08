@@ -42,6 +42,19 @@ final class SchemaTest extends TestCase
         self::assertStringContainsString('KEY partner_time (partner_id,occurred_at)', $tables['visibility_events']);
     }
 
+    public function testPartnersCarryThePartnershipRequestColumns(): void
+    {
+        // Sent side: when this node's request reached the partner.
+        // Received side: what the partner wrote when it introduced itself,
+        // shown where the approve/block decision is taken.
+        $partners = (new Schema($this->wpdb))->tables()['partners'];
+
+        self::assertStringContainsString('request_sent_at datetime NULL', $partners);
+        self::assertStringContainsString('request_message text NULL', $partners);
+        self::assertStringContainsString('request_contact_email varchar(255) NULL', $partners);
+        self::assertStringContainsString('requested_at datetime NULL', $partners);
+    }
+
     public function testJsonColumnsAreLongtext(): void
     {
         $tables = (new Schema($this->wpdb))->tables();

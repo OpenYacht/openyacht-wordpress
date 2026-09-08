@@ -150,6 +150,10 @@ final class WpdbPartnerRepository implements PartnerRepository
             lastSyncedAt: $row['last_synced_at'] ?? null,
             lastAttemptedAt: $row['last_attempted_at'] ?? null,
             sharingScope: SharingScope::tryFrom((string) ($row['sharing_scope'] ?? '')) ?? SharingScope::Standard,
+            requestSentAt: $row['request_sent_at'] ?? null,
+            requestMessage: isset($row['request_message']) && $row['request_message'] !== '' ? (string) $row['request_message'] : null,
+            requestContactEmail: isset($row['request_contact_email']) && $row['request_contact_email'] !== '' ? (string) $row['request_contact_email'] : null,
+            requestedAt: $row['requested_at'] ?? null,
         );
     }
 

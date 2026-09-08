@@ -152,8 +152,14 @@ final class Router
 
     /**
      * Inbound partnership requests (signed; provisional partners allowed —
-     * the request is how a partnership starts). Records the human-readable
-     * request for administrators to review (FP-13).
+     * the request is how a partnership starts). Stores the human-readable
+     * request on the partner row for administrators to review (FP-13).
+     *
+     * Lenient on the body by design: a sender that omits a field has still
+     * introduced itself. Refusing after authenticating would leave it
+     * registered as a provisional partner (trust on first use ran first)
+     * while telling it the request failed, and the operator with a
+     * first-contact alert and no message.
      *
      * // federation-protocol.md §Partner Lifecycle
      */
@@ -163,32 +169,29 @@ final class Router
             JsonResponder::error(ErrorCode::NotFound, 'Unknown federation endpoint.');
         }
 
-        $result = Services::inboundVerification()->authenticate($request, allowProvisional: true);
+        // First contact is announced after the request is stored, so the
+        // notification carries the sender's message and contact.
+        $result = Services::inboundVerification()->authenticate($request, allowProvisional: true, deferFirstContact: true);
 
         if (! $result->verified() || $result->partner === null) {
             JsonResponder::error($result->error ?? ErrorCode::SignatureInvalid, $result->message);
         }
 
         $body = json_decode($request->rawBody, true);
-        $message = is_string($body['message'] ?? null) ? mb_substr($body['message'], 0, 1000) : '';
-        $contactEmail = is_string($body['contact_email'] ?? null) ? mb_substr($body['contact_email'], 0, 255) : '';
+        $body = is_array($body) ? $body : [];
+        $message = is_string($body['message'] ?? null) ? mb_substr(trim($body['message']), 0, 1000) : null;
+        $contactEmail = is_string($body['contact_email'] ?? null) ? mb_substr(trim($body['contact_email']), 0, 255) : null;
 
-        if ($message === '' || $contactEmail === '') {
-            JsonResponder::error(ErrorCode::ValidationError, 'Both message and contact_email are required.');
-        }
+        $partner = Services::partnerService()->recordRequest($result->partner, $message, $contactEmail);
 
-        Services::logger()->log(
-            'partner',
-            "Partnership requested by {$result->partner->domain}",
-            'partner_request_received',
-            $result->partner->id,
-            $request->pathWithQuery,
-            ['message' => $message, 'contact_email' => $contactEmail],
-        );
+        // A sender registered by this very request rides the first-contact
+        // notification, now carrying its message; a partner known before
+        // it asked gets its own — otherwise the request would be invisible.
+        do_action($result->firstContact ? 'openyacht_partner_first_contact' : 'openyacht_partnership_requested', $partner);
 
         JsonResponder::send([
             'status' => 'received',
-            'trust_level' => $result->partner->trustLevel->value,
+            'trust_level' => $partner->trustLevel->value,
         ], 202);
     }
 

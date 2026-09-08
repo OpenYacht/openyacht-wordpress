@@ -8,6 +8,8 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
+use OpenYacht\Federation\IntroductionOutcome;
+use OpenYacht\Federation\PartnerIntroduction;
 use OpenYacht\Services;
 use Throwable;
 
@@ -105,10 +107,33 @@ final class PartnersPage
                     }
 
                     $publicKey = isset($_POST['public_key']) ? trim(sanitize_text_field(wp_unslash($_POST['public_key']))) : '';
-                    $publicKey === ''
+                    $partner = $publicKey === ''
                         ? $service->add($domain)
                         : $service->addWithKey($domain, $publicKey);
-                    $notice = 'added';
+                    // Lifecycle step 1: introduce this node to the partner
+                    // right away, so the partnership shows up on their side
+                    // — with who is asking and why — before any sync poll
+                    // happens to arrive. The row is saved whatever comes
+                    // back; a failed introduction is a warning, not a
+                    // failed add.
+                    $this->flashIntroduction(
+                        $service->introduce($partner, $this->postedMessage(), $this->postedContactEmail()),
+                        $partner->domain,
+                        added: true,
+                    );
+                    $notice = 'introduction';
+                    break;
+                case 'introduce':
+                    $partner = Services::partners()->findByDomain($domain);
+
+                    // A partner blocked here is not one to ask for anything;
+                    // approve it first if the partnership should resume.
+                    if ($partner === null || $partner->trustLevel === \OpenYacht\Federation\TrustLevel::Blocked) {
+                        break;
+                    }
+
+                    $this->flashIntroduction($service->introduce($partner), $partner->domain, added: false);
+                    $notice = 'introduction';
                     break;
                 case 'remove':
                     $partner = Services::partners()->findByDomain($domain);
@@ -307,6 +332,18 @@ final class PartnersPage
             return;
         }
 
+        if ($notice === 'introduction') {
+            $flash = get_transient('openyacht_partner_notice_' . get_current_user_id());
+            delete_transient('openyacht_partner_notice_' . get_current_user_id());
+
+            if (is_array($flash) && is_string($flash['text'] ?? null)) {
+                $type = in_array($flash['type'] ?? '', ['success', 'info', 'warning', 'error'], true) ? $flash['type'] : 'info';
+                printf('<div class="notice notice-%s is-dismissible"><p>%s</p></div>', esc_attr($type), esc_html($flash['text']));
+            }
+
+            return;
+        }
+
         if ($notice === 'synced') {
             printf(
                 '<div class="notice notice-success is-dismissible"><p>%s</p></div>',
@@ -332,7 +369,6 @@ final class PartnersPage
         }
 
         $messages = [
-            'added' => __('Partner added (provisional). Approve it to start receiving requests as a verified partner.', 'openyacht'),
             'removed' => __('Partner removed. If it contacts this site again it reappears as a new provisional partner; block it if that is unwanted.', 'openyacht'),
             'approved' => __('Partner approved — it starts receiving listings on its next poll. Review below what it gets: every field group is granted by default.', 'openyacht'),
             'blocked' => __('Partner blocked. All its requests will be rejected.', 'openyacht'),
@@ -758,8 +794,66 @@ final class PartnersPage
             . '});</script>';
     }
 
+    /**
+     * The outcome of a partnership request, as the notice the operator
+     * sees instead of a bare "added": whether the other side now knows
+     * about this node, or why it does not. Kept per user for the redirect.
+     */
+    private function flashIntroduction(PartnerIntroduction $introduction, string $domain, bool $added): void
+    {
+        [$type, $text] = match ($introduction->outcome) {
+            IntroductionOutcome::Delivered => ['info', sprintf(
+                /* translators: %s: partner domain. */
+                __('Partnership request delivered to %s — it appears there as a provisional partner until someone on their side approves it.', 'openyacht'),
+                $domain,
+            )],
+            IntroductionOutcome::Accepted => ['success', sprintf(
+                /* translators: %s: partner domain. */
+                __('%s already lists this site as a verified partner.', 'openyacht'),
+                $domain,
+            )],
+            IntroductionOutcome::Blocked => ['warning', sprintf(
+                /* translators: %s: partner domain. */
+                __('%s has blocked this site and will not accept its requests.', 'openyacht'),
+                $domain,
+            )],
+            IntroductionOutcome::Failed => ['warning', sprintf(
+                /* translators: 1: partner domain, 2: the reason the request was not delivered. */
+                __('The partnership request to %1$s was not delivered (%2$s). Resend it from the Partners list once the other side is reachable.', 'openyacht'),
+                $domain,
+                rtrim($introduction->detail, '.'),
+            )],
+        };
+
+        if ($added) {
+            $text = __('Partner added (provisional) — approve it here to start receiving its listings.', 'openyacht') . ' ' . $text;
+        }
+
+        set_transient('openyacht_partner_notice_' . get_current_user_id(), ['type' => $type, 'text' => $text], 60);
+    }
+
+    private function postedMessage(): ?string
+    {
+        $message = isset($_POST['request_message']) ? trim(sanitize_textarea_field(wp_unslash($_POST['request_message']))) : '';
+
+        return $message === '' ? null : mb_substr($message, 0, 1000);
+    }
+
+    private function postedContactEmail(): ?string
+    {
+        $email = isset($_POST['contact_email']) ? sanitize_email(wp_unslash($_POST['contact_email'])) : '';
+
+        return $email === '' ? null : $email;
+    }
+
     private function renderAddForm(): void
     {
+        $user = wp_get_current_user();
+        $defaultMessage = sprintf(
+            /* translators: %s: this node's name. */
+            __('%s would like to federate listings with you via OpenYacht.', 'openyacht'),
+            \OpenYacht\Federation\NodeConfig::nodeName(),
+        );
         ?>
         <h2><?php esc_html_e('Add partner', 'openyacht'); ?></h2>
         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
@@ -772,6 +866,20 @@ final class PartnersPage
                     <td>
                         <input name="domain" type="text" id="openyacht_domain" class="regular-text" placeholder="broker.example" required>
                         <p class="description"><?php esc_html_e('The partner node\'s identity domain. Its discovery document is fetched over verified TLS and the partner starts as provisional.', 'openyacht'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="openyacht_request_message"><?php esc_html_e('Message to the partner', 'openyacht'); ?></label></th>
+                    <td>
+                        <textarea name="request_message" id="openyacht_request_message" class="large-text" rows="3" maxlength="1000" placeholder="<?php echo esc_attr($defaultMessage); ?>"></textarea>
+                        <p class="description"><?php esc_html_e('Sent with the signed partnership request, so the person approving on their side knows who is asking and why. Leave empty for the one-line default.', 'openyacht'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row"><label for="openyacht_contact_email"><?php esc_html_e('Contact email', 'openyacht'); ?></label></th>
+                    <td>
+                        <input name="contact_email" type="email" id="openyacht_contact_email" class="regular-text" value="<?php echo esc_attr((string) $user->user_email); ?>">
+                        <p class="description"><?php esc_html_e('How their administrator can reply about the request. Defaults to your email; empty falls back to the site admin email.', 'openyacht'); ?></p>
                     </td>
                 </tr>
             </table>

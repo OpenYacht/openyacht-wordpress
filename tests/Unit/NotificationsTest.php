@@ -30,9 +30,26 @@ final class NotificationsTest extends TestCase
         });
     }
 
-    private function partner(): Partner
+    private function partner(?string $requestMessage = null, ?string $requestContactEmail = null): Partner
     {
-        return new Partner(7, 'partner.test', 'c6d45cc6-dd45-4f8f-b588-53738473a183', [], null, null, TrustLevel::Provisional, null, null, null, 0, null, null);
+        return new Partner(
+            7,
+            'partner.test',
+            'c6d45cc6-dd45-4f8f-b588-53738473a183',
+            [],
+            null,
+            null,
+            TrustLevel::Provisional,
+            null,
+            null,
+            null,
+            0,
+            null,
+            null,
+            requestMessage: $requestMessage,
+            requestContactEmail: $requestContactEmail,
+            requestedAt: $requestMessage !== null || $requestContactEmail !== null ? '2026-09-08 10:00:00' : null,
+        );
     }
 
     public function testFirstContactMailsTheAdminWithApprovalLink(): void
@@ -44,6 +61,30 @@ final class NotificationsTest extends TestCase
         self::assertSame('admin@node.test', $to);
         self::assertStringContainsString('partner.test', $subject);
         self::assertStringContainsString('provisional', $message);
+        self::assertStringContainsString('page=openyacht-partners', $message);
+    }
+
+    public function testFirstContactMailCarriesThePartnersRequestMessageAndContact(): void
+    {
+        // The one person the trust model puts in the loop gets "who are
+        // you and why", not just "an unknown node contacted us".
+        (new Notifications())->partnerFirstContact($this->partner('We list in Palm Beach and would like to share.', 'sales@partner.test'));
+
+        self::assertCount(1, $this->sent);
+        self::assertStringContainsString('We list in Palm Beach', $this->sent[0][2]);
+        self::assertStringContainsString('sales@partner.test', $this->sent[0][2]);
+    }
+
+    public function testPartnershipRequestFromAKnownPartnerMailsTheApprover(): void
+    {
+        (new Notifications())->partnershipRequested($this->partner('Asking again.', 'sales@partner.test'));
+
+        self::assertCount(1, $this->sent);
+        [, $subject, $message] = $this->sent[0];
+        self::assertStringContainsString('partnership request', $subject);
+        self::assertStringContainsString('partner.test', $subject);
+        self::assertStringContainsString('provisional', $message);
+        self::assertStringContainsString('Asking again.', $message);
         self::assertStringContainsString('page=openyacht-partners', $message);
     }
 

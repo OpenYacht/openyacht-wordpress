@@ -98,13 +98,20 @@ final class Services
             new WellKnownClient(),
             self::logger(),
             self::copies(),
+            null,
+            self::signedClient(),
         );
+    }
+
+    public static function signedClient(): SignedClient
+    {
+        return self::$cache[__FUNCTION__] ??= new SignedClient(new Signer(self::keyManager()));
     }
 
     public static function syncService(): SyncService
     {
         return self::$cache[__FUNCTION__] ??= new SyncService(
-            new SignedClient(new Signer(self::keyManager())),
+            self::signedClient(),
             self::partners(),
             self::copies(),
         );

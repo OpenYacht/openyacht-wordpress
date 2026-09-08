@@ -41,7 +41,19 @@ final class InboundVerification
     ) {
     }
 
-    public function authenticate(RequestContext $request, bool $allowProvisional = false): InboundResult
+    /**
+     * @param bool $allowProvisional the endpoint exists for unapproved
+     *                               partners (the partnership request)
+     * @param bool $deferFirstContact do not fire openyacht_partner_first_contact
+     *                                for a sender this request registers:
+     *                                the caller stores something from the
+     *                                request the notification should carry
+     *                                and fires it itself. Fired here
+     *                                regardless when the request is then
+     *                                rejected, since the partner row exists
+     *                                either way.
+     */
+    public function authenticate(RequestContext $request, bool $allowProvisional = false, bool $deferFirstContact = false): InboundResult
     {
         $senderDomain = strtolower($request->header('X-OpenYacht-Node'));
         $keyId = $request->header('X-OpenYacht-Key');
@@ -64,6 +76,7 @@ final class InboundVerification
         // provisional (FP-13); an unreachable well-known document means we
         // cannot authenticate the sender at all.
         $partner = $this->partners->findByDomain($senderDomain);
+        $firstContact = false;
 
         if ($partner === null) {
             try {
@@ -72,12 +85,39 @@ final class InboundVerification
                 return $this->reject($request, $senderDomain, ErrorCode::PartnerUnknown, "Could not fetch the sender's well-known document.");
             }
 
-            // Unlike openyacht_partner_added (which also fires for
-            // operator-initiated adds), this marks an unsolicited
-            // introduction — the surface admins want notifying about.
-            do_action('openyacht_partner_first_contact', $partner);
+            $firstContact = true;
         }
 
+        $result = $this->verifyRegistered($request, $partner, $senderDomain, $keyId, $timestamp, $signature, $allowProvisional, $firstContact);
+
+        // Unlike openyacht_partner_added (which also fires for
+        // operator-initiated adds), this marks an unsolicited
+        // introduction — the surface admins want notifying about. It
+        // fires whatever the request's fate, since the partner row now
+        // exists; a caller that deferred it gets it only for a request
+        // that verified, and owes it from there.
+        if ($firstContact && (! $deferFirstContact || ! $result->verified())) {
+            do_action('openyacht_partner_first_contact', $result->partner ?? $partner);
+        }
+
+        return $result;
+    }
+
+    /**
+     * The verification procedure for a sender that is (now) registered:
+     * blocked-partner rejection, key selection with pinning, signature
+     * verification with the one permitted refetch, the provisional gate.
+     */
+    private function verifyRegistered(
+        RequestContext $request,
+        Partner $partner,
+        string $senderDomain,
+        string $keyId,
+        string $timestamp,
+        string $signature,
+        bool $allowProvisional,
+        bool $firstContact,
+    ): InboundResult {
         if ($partner->trustLevel === TrustLevel::Blocked) {
             return $this->reject($request, $senderDomain, ErrorCode::PartnerBlocked, 'This partner is blocked.');
         }
@@ -131,7 +171,7 @@ final class InboundVerification
 
         $this->logger->log('request', "Verified request from {$senderDomain}", 'ok', $partner->id, $request->pathWithQuery);
 
-        return InboundResult::ok($partner);
+        return InboundResult::ok($partner, $firstContact);
     }
 
     /**

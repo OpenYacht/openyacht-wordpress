@@ -12,18 +12,24 @@ use LogicException;
 use RuntimeException;
 
 /**
- * Partner lifecycle: first contact (TOFU), key refresh with reinstall
- * detection, out-of-band registration, the human approve/block
- * decisions, and removal of a partner nothing has been received from.
+ * Partner lifecycle: first contact (TOFU), the outbound partnership
+ * request that introduces this node to the other side and the inbound
+ * one it records, key refresh with reinstall detection, out-of-band
+ * registration, the human approve/block decisions, and removal of a
+ * partner nothing has been received from.
  *
  * // federation-protocol.md §Identity and Trust Model, §Partner Lifecycle
  */
 final class PartnerService
 {
+    public const REQUEST_PATH = '/openyacht/v1/partners/request';
+
     /**
      * @param string|null $ownDomain this node's identity domain; resolved
      *                               from NodeConfig when null (tests pass
      *                               it explicitly)
+     * @param FederationClient|null $client the signed outbound client the
+     *                                      partnership request goes out on
      */
     public function __construct(
         private readonly PartnerRepository $partners,
@@ -31,6 +37,7 @@ final class PartnerService
         private readonly Logger $logger,
         private readonly ?CopyRepository $copies = null,
         private readonly ?string $ownDomain = null,
+        private readonly ?FederationClient $client = null,
     ) {
     }
 
@@ -109,6 +116,163 @@ final class PartnerService
         do_action('openyacht_partner_added', $partner);
 
         return $partner;
+    }
+
+    /**
+     * Introduce this node to a partner with a signed partnership request
+     * (federation-protocol.md §Partner Lifecycle step 1): their node
+     * verifies the signature, stores this node as provisional and
+     * notifies its administrators — the request is what puts a "who are
+     * you and why" in front of the person who approves it. Without it a
+     * partnership shows up over there only when the first sync poll
+     * happens to arrive, and a partner added but never polled introduces
+     * itself to nobody.
+     *
+     * Nodes without the partners/request endpoint answer 404/405 from
+     * their router before any signature check, so nothing is registered
+     * over there; every conformant node authenticates a signed listings
+     * read, which is why that is the fallback. The partner row is saved
+     * before the attempt, so every outcome is reported, never thrown.
+     *
+     * Both fields always go on the wire: a receiver may reject a body
+     * missing either as a validation error after registering the sender,
+     * which would read as a failed introduction.
+     */
+    public function introduce(Partner $partner, ?string $message = null, ?string $contactEmail = null): PartnerIntroduction
+    {
+        $message = trim((string) $message);
+        $contactEmail = trim((string) $contactEmail);
+
+        if ($message === '') {
+            $message = sprintf('%s would like to federate listings with you via OpenYacht.', NodeConfig::nodeName());
+        }
+
+        if ($contactEmail === '') {
+            $adminEmail = get_option('admin_email');
+            $contactEmail = is_string($adminEmail) ? trim($adminEmail) : '';
+        }
+
+        $introduction = $this->attempt($partner, $message, $contactEmail);
+
+        if ($introduction->outcome->reachedPartner()) {
+            $this->partners->update($partner->id, ['request_sent_at' => gmdate('Y-m-d H:i:s')]);
+        }
+
+        $this->logger->log(
+            'partner',
+            "Partnership request to {$partner->domain}: {$introduction->outcome->value}",
+            'partner_request_sent',
+            $partner->id,
+            self::REQUEST_PATH,
+            [
+                'outcome' => $introduction->outcome->value,
+                'detail' => $introduction->detail,
+                'message' => $message,
+                'contact_email' => $contactEmail,
+            ],
+        );
+
+        return $introduction;
+    }
+
+    /**
+     * The receiving side of the same step: a partner introduced itself
+     * with a message and a contact. Stored on its row so the Partners
+     * screen and the notification put "who and why" in front of the
+     * person deciding whether to approve (FP-13).
+     *
+     * Lenient by design — either field may be missing. The sender has
+     * introduced itself regardless, and a receiver that refuses after
+     * registering the sender leaves both sides confused: registered here,
+     * told it failed over there.
+     */
+    public function recordRequest(Partner $partner, ?string $message, ?string $contactEmail): Partner
+    {
+        $message = trim((string) $message);
+        $contactEmail = trim((string) $contactEmail);
+
+        $this->partners->update($partner->id, [
+            'request_message' => $message !== '' ? $message : null,
+            'request_contact_email' => $contactEmail !== '' ? $contactEmail : null,
+            'requested_at' => gmdate('Y-m-d H:i:s'),
+        ]);
+
+        $this->logger->log(
+            'partner',
+            "Partnership requested by {$partner->domain}",
+            'partner_request_received',
+            $partner->id,
+            self::REQUEST_PATH,
+            ['message' => $message, 'contact_email' => $contactEmail],
+        );
+
+        return $this->fresh($partner);
+    }
+
+    /**
+     * The wire round trip. Every failure mode short of a bug is reported
+     * as an outcome here so the caller never has to catch.
+     */
+    private function attempt(Partner $partner, string $message, string $contactEmail): PartnerIntroduction
+    {
+        $client = $this->client ?? throw new LogicException('PartnerService needs a FederationClient to send partnership requests.');
+
+        try {
+            $response = $client->post($partner, self::REQUEST_PATH, [
+                'message' => $message,
+                'contact_email' => $contactEmail,
+            ]);
+
+            $probed = in_array($response->status, [404, 405], true);
+
+            if ($probed) {
+                $response = $client->get($partner, '/openyacht/v1/listings?page_size=1');
+            }
+        } catch (RuntimeException $exception) {
+            // TransportException (unreachable, or the outbound guard
+            // refused the host) or the Signer's "no active key": all for
+            // the operator to fix, none of them the partner's answer.
+            return new PartnerIntroduction(IntroductionOutcome::Failed, $exception->getMessage());
+        }
+
+        return $this->interpret($response, $probed);
+    }
+
+    /**
+     * Read the partner's answer. A 2xx from the request endpoint means it
+     * was registered, and its trust_level says whether a human there
+     * still has to approve; a 2xx from the listings probe means they are
+     * already serving this node listings, which only a verified partner
+     * gets (FP-13). A 403 PARTNER_PROVISIONAL from either is "registered,
+     * awaiting a human".
+     */
+    private function interpret(HttpResponse $response, bool $probed): PartnerIntroduction
+    {
+        $json = $response->json() ?? [];
+        $code = $json['error']['code'] ?? null;
+
+        if ($response->ok()) {
+            if ($probed) {
+                return new PartnerIntroduction(IntroductionOutcome::Accepted, 'the partner already serves this node listings');
+            }
+
+            return ($json['trust_level'] ?? null) === TrustLevel::Verified->value
+                ? new PartnerIntroduction(IntroductionOutcome::Accepted, 'the partner already lists this node as verified')
+                : new PartnerIntroduction(IntroductionOutcome::Delivered, 'registered there as provisional, awaiting their approval');
+        }
+
+        if ($response->status === 403 && $code === ErrorCode::PartnerProvisional->value) {
+            return new PartnerIntroduction(IntroductionOutcome::Delivered, 'registered there as provisional, awaiting their approval');
+        }
+
+        if ($response->status === 403 && $code === ErrorCode::PartnerBlocked->value) {
+            return new PartnerIntroduction(IntroductionOutcome::Blocked, 'the partner has blocked this node');
+        }
+
+        return new PartnerIntroduction(
+            IntroductionOutcome::Failed,
+            sprintf('unexpected answer HTTP %d%s', $response->status, is_string($code) ? " {$code}" : ''),
+        );
     }
 
     /**

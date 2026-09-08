@@ -17,7 +17,7 @@ if (! defined('ABSPATH')) {
  */
 final class Schema
 {
-    public const VERSION = 8;
+    public const VERSION = 9;
 
     public const OPTION = 'openyacht_schema_version';
 
@@ -172,6 +172,10 @@ final class Schema
   consecutive_failures int(10) unsigned NOT NULL DEFAULT 0,
   last_synced_at datetime NULL,
   last_attempted_at datetime NULL,
+  request_sent_at datetime NULL,
+  request_message text NULL,
+  request_contact_email varchar(255) NULL,
+  requested_at datetime NULL,
   created_at datetime NOT NULL,
   updated_at datetime NOT NULL,
   PRIMARY KEY  (id),

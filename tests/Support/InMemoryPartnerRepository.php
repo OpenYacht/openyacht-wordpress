@@ -103,6 +103,10 @@ final class InMemoryPartnerRepository implements PartnerRepository
             lastSyncedAt: $columns['last_synced_at'] ?? null,
             lastAttemptedAt: $columns['last_attempted_at'] ?? null,
             sharingScope: $scope instanceof SharingScope ? $scope : (SharingScope::tryFrom((string) $scope) ?? SharingScope::Standard),
+            requestSentAt: $columns['request_sent_at'] ?? null,
+            requestMessage: $columns['request_message'] ?? null,
+            requestContactEmail: $columns['request_contact_email'] ?? null,
+            requestedAt: $columns['requested_at'] ?? null,
         );
     }
 
@@ -125,6 +129,10 @@ final class InMemoryPartnerRepository implements PartnerRepository
             'last_synced_at' => $partner->lastSyncedAt,
             'last_attempted_at' => $partner->lastAttemptedAt,
             'sharing_scope' => $partner->sharingScope,
+            'request_sent_at' => $partner->requestSentAt,
+            'request_message' => $partner->requestMessage,
+            'request_contact_email' => $partner->requestContactEmail,
+            'requested_at' => $partner->requestedAt,
         ];
     }
 }
