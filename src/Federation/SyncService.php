@@ -27,6 +27,14 @@ use Throwable;
  */
 final class SyncService
 {
+    /**
+     * A push-subscribed partner is still polled to reconcile, once a day
+     * (API-11 RECOMMENDED), because missed webhooks are a fact of life.
+     */
+    public const RECONCILIATION_INTERVAL_SECONDS = 24 * 3600;
+
+    public const RECONCILIATION_TOLERANCE_SECONDS = 5 * 60;
+
     public function __construct(
         private readonly FederationClient $client,
         private readonly PartnerRepository $partners,
@@ -59,25 +67,90 @@ final class SyncService
     }
 
     /**
-     * Exponential backoff between failed attempts, capped at 24 hours.
+     * Exponential backoff between failed attempts, capped at 24 hours;
+     * then, for a partner whose changes arrive by push, the daily
+     * reconciliation interval measured from the last successful poll.
      *
      * // federation-protocol.md §Health and Failure Handling
+     * // api-design.md §Subscriptions
      */
     public function isDue(Partner $partner, ?int $nowTimestamp = null): bool
     {
-        if ($partner->consecutiveFailures === 0 || $partner->lastAttemptedAt === null) {
-            return true;
+        $now = $nowTimestamp ?? time();
+
+        if ($partner->consecutiveFailures > 0 && $partner->lastAttemptedAt !== null) {
+            $lastAttempt = strtotime($partner->lastAttemptedAt . ' UTC');
+            $delaySeconds = min(3600 * (2 ** ($partner->consecutiveFailures - 1)), 86400);
+
+            if ($lastAttempt !== false && $lastAttempt + $delaySeconds >= $now) {
+                return false;
+            }
         }
 
-        $lastAttempt = strtotime($partner->lastAttemptedAt . ' UTC');
+        if ($partner->isPushSubscribed() && $partner->lastOkAt !== null) {
+            $lastOk = strtotime($partner->lastOkAt . ' UTC');
 
-        if ($lastAttempt === false) {
-            return true;
+            return $lastOk === false
+                || $lastOk + self::RECONCILIATION_INTERVAL_SECONDS - self::RECONCILIATION_TOLERANCE_SECONDS < $now;
         }
 
-        $delaySeconds = min(3600 * (2 ** ($partner->consecutiveFailures - 1)), 86400);
+        return true;
+    }
 
-        return $lastAttempt + $delaySeconds < ($nowTimestamp ?? time());
+    /**
+     * Apply one pushed listing or tombstone (API-11). Deliveries are
+     * at-least-once, so a repeat is acknowledged and ignored — but a
+     * repeat is decided against the state the copy already holds, not a
+     * receipt log: the re-share case delivers the listing again with its
+     * own unchanged updated_at after a tombstone carried the transition
+     * time, and that MUST apply. Everything else goes through the same
+     * path as a polled item.
+     *
+     * @param array<string, mixed> $item
+     * @return string created|updated|tombstoned|duplicate|skipped
+     */
+    public function applyDelivery(Partner $partner, array $item): string
+    {
+        return $this->alreadyApplied($partner, $item) ? 'duplicate' : $this->apply($partner, $item);
+    }
+
+    /**
+     * Whether the stored copy already reflects this delivery: same
+     * updated_at, and tombstoned iff the delivery is a tombstone.
+     *
+     * @param array<string, mixed> $item
+     */
+    private function alreadyApplied(Partner $partner, array $item): bool
+    {
+        $canonicalUri = $item['id'] ?? null;
+        $updatedAt = $item['updated_at'] ?? null;
+
+        if (! is_string($canonicalUri) || ! is_string($updatedAt)) {
+            return false;
+        }
+
+        $copy = $this->copies->findForPartner($partner->id, $canonicalUri);
+
+        if ($copy === null || $copy->listingUpdatedAt === null) {
+            return false;
+        }
+
+        $delivered = strtotime($updatedAt);
+        $held = self::timestamp($copy->listingUpdatedAt);
+
+        return $delivered !== false
+            && $held !== false
+            && $delivered === $held
+            && ($copy->tombstonedAt !== null) === (($item['tombstone'] ?? false) === true);
+    }
+
+    /**
+     * Stored copies hold app-managed 'Y-m-d H:i:s' UTC datetimes; the
+     * wire form (and the in-memory test double) carries RFC 3339.
+     */
+    private static function timestamp(string $value): int|false
+    {
+        return strtotime(preg_match('/[TZ]/', $value) === 1 ? $value : $value . ' UTC');
     }
 
     private function pullAllPages(Partner $partner): SyncResult

@@ -8,8 +8,10 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
+use OpenYacht\Federation\BlockedOutboundHost;
 use OpenYacht\Federation\ErrorCode;
 use OpenYacht\Federation\NodeConfig;
+use OpenYacht\Federation\Partner;
 use OpenYacht\Services;
 
 /**
@@ -69,11 +71,13 @@ final class Router
     private function dispatchV1(string $route, RequestContext $request): never
     {
         if ($route === 'listings') {
-            $this->listings($request, static fn (ListingsEndpoint $endpoint, $partner): array => $endpoint->index($partner, $_GET));
+            $this->requireMethod($request, ['GET']);
+            $this->signed($request, static fn (Partner $partner): array => Services::listingsEndpoint()->index($partner, $_GET));
         }
 
         if (preg_match('#^listings/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$#', $route, $matches) === 1) {
-            $this->listings($request, static fn (ListingsEndpoint $endpoint, $partner): array => $endpoint->show($partner, $matches[1]));
+            $this->requireMethod($request, ['GET']);
+            $this->signed($request, static fn (Partner $partner): array => Services::listingsEndpoint()->show($partner, $matches[1]));
         }
 
         switch ($route) {
@@ -95,7 +99,7 @@ final class Router
                 JsonResponder::send([
                     'protocol_versions' => NodeConfig::PROTOCOL_VERSIONS,
                     'features' => [
-                        'subscriptions' => false,
+                        'subscriptions' => Services::subscriptionService()->offersSubscriptions(),
                         'charter_listings' => true,
                         'media_hashes' => true,
                     ],
@@ -107,8 +111,27 @@ final class Router
                 // JsonResponder::send() exits.
                 // no break
             case 'partners/request':
+                $this->requireMethod($request, ['POST']);
                 $this->partnersRequest($request);
                 // partnersRequest() exits.
+                // no break
+            case 'subscriptions':
+                // A node not offering the feature has no such route (API-10):
+                // answered before authentication, like any unknown path.
+                if (! Services::subscriptionService()->offersSubscriptions()) {
+                    JsonResponder::error(ErrorCode::NotFound, 'This node does not offer push subscriptions.');
+                }
+
+                $this->requireMethod($request, ['POST', 'DELETE']);
+                $this->signed($request, fn (Partner $partner): array => $request->method === 'POST'
+                    ? $this->registerSubscription($partner, $request)
+                    : $this->removeSubscription($partner));
+                // signed() exits.
+                // no break
+            case 'inbox':
+                $this->requireMethod($request, ['POST']);
+                $this->signed($request, fn (Partner $partner): array => $this->inbox($partner, $request));
+                // signed() exits.
                 // no break
             default:
                 JsonResponder::error(ErrorCode::NotFound, 'Unknown federation endpoint.');
@@ -116,13 +139,13 @@ final class Router
     }
 
     /**
-     * The signed listing surface: authenticate (verified partners only),
-     * enforce the advertised rate limit (429 + Retry-After, API-9), run
-     * the endpoint, emit.
+     * The signed surface: authenticate (verified partners only), enforce
+     * the advertised rate limit (429 + Retry-After, API-9), run the
+     * endpoint, emit.
      *
-     * @param callable(ListingsEndpoint, \OpenYacht\Federation\Partner): array{payload?: array<string, mixed>, status?: int, error?: \OpenYacht\Federation\ErrorCode, message?: string} $handler
+     * @param callable(Partner): array{payload?: array<string, mixed>, status?: int, error?: ErrorCode, message?: string} $handler
      */
-    private function listings(RequestContext $request, callable $handler): never
+    private function signed(RequestContext $request, callable $handler): never
     {
         $result = Services::inboundVerification()->authenticate($request);
 
@@ -141,13 +164,102 @@ final class Router
             );
         }
 
-        $outcome = $handler(Services::listingsEndpoint(), $result->partner);
+        $outcome = $handler($result->partner);
 
         if (isset($outcome['error'])) {
             JsonResponder::error($outcome['error'], $outcome['message'] ?? '');
         }
 
+        if (($outcome['status'] ?? 200) === 204) {
+            JsonResponder::noContent();
+        }
+
         JsonResponder::send($outcome['payload'] ?? [], $outcome['status'] ?? 200);
+    }
+
+    /**
+     * @param list<string> $allowed
+     */
+    private function requireMethod(RequestContext $request, array $allowed): void
+    {
+        if (in_array($request->method, $allowed, true)) {
+            return;
+        }
+
+        // The status says it; the error envelope's code list has no
+        // method-not-allowed entry (api-design.md §Errors).
+        JsonResponder::error(
+            ErrorCode::NotFound,
+            'Method not allowed on this endpoint; see the Allow header.',
+            [],
+            ['Allow' => implode(', ', $allowed)],
+            405,
+        );
+    }
+
+    /**
+     * Push subscription registration (API-10): one HTTPS callback per
+     * partner, replacing any previous one. The callback is partner-
+     * supplied and this node will POST to it from the server, so it
+     * passes the outbound guard before it is stored (FP-14).
+     *
+     * @return array{payload?: array<string, mixed>, status?: int, error?: ErrorCode, message?: string}
+     */
+    private function registerSubscription(Partner $partner, RequestContext $request): array
+    {
+        $body = json_decode($request->rawBody, true);
+        $callback = is_array($body) && is_string($body['callback'] ?? null) ? trim($body['callback']) : '';
+
+        if ($callback === '' || strlen($callback) > 2000) {
+            return ['error' => ErrorCode::ValidationError, 'message' => 'callback must be an HTTPS URL.'];
+        }
+
+        try {
+            Services::subscriptionService()->register($partner, $callback);
+        } catch (BlockedOutboundHost $exception) {
+            return ['error' => ErrorCode::ValidationError, 'message' => 'callback must be a plain HTTPS URL on a public host: ' . $exception->getMessage()];
+        }
+
+        return ['status' => 204];
+    }
+
+    /**
+     * @return array{status: int}
+     */
+    private function removeSubscription(Partner $partner): array
+    {
+        Services::subscriptionService()->unregister($partner);
+
+        return ['status' => 204];
+    }
+
+    /**
+     * The callback this node registers with partners it subscribes to
+     * (API-11): an authority POSTs one changed listing or tombstone here,
+     * signed like any federation request. Only partners this node actually
+     * subscribed to are accepted — a push from anyone else is unsolicited
+     * and answered NOT_FOUND. Deliveries are at-least-once, so a repeat is
+     * acknowledged and ignored; everything else applies exactly like a
+     * polled item. Any 2xx counts as delivered to the sender.
+     *
+     * @return array{payload?: array<string, mixed>, status?: int, error?: ErrorCode, message?: string}
+     */
+    private function inbox(Partner $partner, RequestContext $request): array
+    {
+        if (! $partner->isPushSubscribed()) {
+            return ['error' => ErrorCode::NotFound, 'message' => 'This node holds no subscription with the sender.'];
+        }
+
+        $item = json_decode($request->rawBody, true);
+
+        if (! is_array($item) || ! is_string($item['id'] ?? null) || ! is_string($item['updated_at'] ?? null)) {
+            return ['error' => ErrorCode::ValidationError, 'message' => 'A delivery is one listing or tombstone object with id and updated_at.'];
+        }
+
+        $outcome = Services::syncService()->applyDelivery($partner, $item);
+        Services::logger()->log('sync', "Push from {$partner->domain}: {$outcome} {$item['id']}", 'push_' . $outcome, $partner->id, $request->pathWithQuery);
+
+        return ['payload' => ['status' => 'received', 'outcome' => $outcome], 'status' => 200];
     }
 
     /**
@@ -165,10 +277,6 @@ final class Router
      */
     private function partnersRequest(RequestContext $request): never
     {
-        if ($request->method !== 'POST') {
-            JsonResponder::error(ErrorCode::NotFound, 'Unknown federation endpoint.');
-        }
-
         // First contact is announced after the request is stored, so the
         // notification carries the sender's message and contact.
         $result = Services::inboundVerification()->authenticate($request, allowProvisional: true, deferFirstContact: true);

@@ -67,6 +67,13 @@ final class Settings
                 'options' => $driverOptions,
                 'description' => __('Where cached partner images are stored. Cloud options (e.g. Cloudflare R2) appear here once a storage add-on plugin is installed; "wp openyacht media migrate" moves existing images between them.', 'openyacht'),
             ],
+            'push_subscriptions' => [
+                'label' => __('Offer push subscriptions', 'openyacht'),
+                'type' => 'checkbox',
+                'section' => 'push',
+                'default' => false,
+                'description' => __('Verified partners can register a callback and receive each change as a signed POST instead of waiting for their next poll. Deliveries retry for up to 24 hours from wp-cron, so this needs a real system cron (set DISABLE_WP_CRON and run "wp cron event run --due-now" every minute). Partners still poll daily to reconcile. Subscribing to a partner\'s pushes is done per partner on the Partners screen and needs no setting.', 'openyacht'),
+            ],
             'log_retention_days' => [
                 'label' => __('Keep request logs for (days)', 'openyacht'),
                 'type' => 'text',
@@ -92,6 +99,7 @@ final class Settings
         return [
             'identity' => __('Node identity', 'openyacht'),
             'media' => __('Partner media', 'openyacht'),
+            'push' => __('Push subscriptions', 'openyacht'),
             'activity' => __('Activity log', 'openyacht'),
             'uninstall' => __('Uninstall', 'openyacht'),
         ];

@@ -26,6 +26,8 @@ final class Partner
      * @param string|null $requestMessage what the partner wrote when it introduced itself
      * @param string|null $requestContactEmail how the partner said to reach it about the request
      * @param string|null $requestedAt when the partner's request arrived
+     * @param string|null $pushCallbackUrl where this node pushes changes to the partner (it subscribed here)
+     * @param string|null $pushSubscribedAt when this node subscribed to the partner's pushes (they arrive at the inbox)
      */
     public function __construct(
         public readonly int $id,
@@ -46,7 +48,31 @@ final class Partner
         public readonly ?string $requestMessage = null,
         public readonly ?string $requestContactEmail = null,
         public readonly ?string $requestedAt = null,
+        public readonly ?string $pushCallbackUrl = null,
+        public readonly ?string $pushCallbackRegisteredAt = null,
+        public readonly ?string $pushLastDeliveredAt = null,
+        public readonly ?string $pushLastFailedAt = null,
+        public readonly ?string $pushSubscribedAt = null,
     ) {
+    }
+
+    /**
+     * Whether this node pushes changes to the partner: it registered a
+     * callback and is still verified — a push delivery IS listings, so it
+     * needs the same approval as the feed (FP-13).
+     */
+    public function receivesPushes(): bool
+    {
+        return $this->pushCallbackUrl !== null && $this->trustLevel === TrustLevel::Verified;
+    }
+
+    /**
+     * Whether this node subscribed to the partner's changes — its pushes
+     * are accepted at the inbox and its reconciliation poll is daily.
+     */
+    public function isPushSubscribed(): bool
+    {
+        return $this->pushSubscribedAt !== null;
     }
 
     /**

@@ -121,7 +121,7 @@ final class PartnersPage
                         $partner->domain,
                         added: true,
                     );
-                    $notice = 'introduction';
+                    $notice = 'flash';
                     break;
                 case 'introduce':
                     $partner = Services::partners()->findByDomain($domain);
@@ -133,7 +133,42 @@ final class PartnersPage
                     }
 
                     $this->flashIntroduction($service->introduce($partner), $partner->domain, added: false);
-                    $notice = 'introduction';
+                    $notice = 'flash';
+                    break;
+                case 'subscribe':
+                case 'unsubscribe':
+                    $partner = Services::partners()->findByDomain($domain);
+
+                    if ($partner === null) {
+                        break;
+                    }
+
+                    if ($op === 'subscribe') {
+                        // Refusals (not verified here, feature not offered,
+                        // unreachable) surface as the error notice below.
+                        Services::subscriptionClient()->subscribe($partner);
+                        $this->flash('success', sprintf(
+                            /* translators: %s: partner domain. */
+                            __('Subscribed to pushes from %s. Its changes now arrive as they happen; it is still polled once a day to reconcile.', 'openyacht'),
+                            $partner->domain,
+                        ));
+                    } else {
+                        $warning = Services::subscriptionClient()->unsubscribe($partner);
+                        $this->flash($warning === null ? 'success' : 'warning', $warning === null
+                            ? sprintf(
+                                /* translators: %s: partner domain. */
+                                __('Unsubscribed from pushes from %s. It is back on the hourly poll.', 'openyacht'),
+                                $partner->domain,
+                            )
+                            : sprintf(
+                                /* translators: 1: partner domain, 2: why the partner did not acknowledge the removal. */
+                                __('Unsubscribed from pushes from %1$s here and back on the hourly poll, but the partner did not acknowledge the removal (%2$s). Any push it still sends is refused at the inbox.', 'openyacht'),
+                                $partner->domain,
+                                rtrim($warning, '.'),
+                            ));
+                    }
+
+                    $notice = 'flash';
                     break;
                 case 'remove':
                     $partner = Services::partners()->findByDomain($domain);
@@ -332,7 +367,7 @@ final class PartnersPage
             return;
         }
 
-        if ($notice === 'introduction') {
+        if ($notice === 'flash') {
             $flash = get_transient('openyacht_partner_notice_' . get_current_user_id());
             delete_transient('openyacht_partner_notice_' . get_current_user_id());
 
@@ -829,6 +864,14 @@ final class PartnersPage
             $text = __('Partner added (provisional) — approve it here to start receiving its listings.', 'openyacht') . ' ' . $text;
         }
 
+        $this->flash($type, $text);
+    }
+
+    /**
+     * A typed notice for after the redirect, kept per user for a minute.
+     */
+    private function flash(string $type, string $text): void
+    {
         set_transient('openyacht_partner_notice_' . get_current_user_id(), ['type' => $type, 'text' => $text], 60);
     }
 

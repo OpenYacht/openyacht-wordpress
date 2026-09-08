@@ -17,7 +17,7 @@ use Throwable;
 use WP_CLI;
 
 /**
- * Partner lifecycle: `wp openyacht partner <add|list|approve|block|remove|refresh-keys|introduce>`.
+ * Partner lifecycle: `wp openyacht partner <add|list|approve|block|remove|refresh-keys|introduce|subscribe|unsubscribe>`.
  */
 final class PartnerCommand
 {
@@ -119,6 +119,59 @@ final class PartnerCommand
             isset($assocArgs['message']) ? (string) $assocArgs['message'] : null,
             isset($assocArgs['contact-email']) ? (string) $assocArgs['contact-email'] : null,
         ));
+    }
+
+    /**
+     * Subscribe to a partner's push deliveries (API-11): its changes then
+     * arrive at this node's inbox as they happen, signed like any
+     * federation request, and the partner is polled once a day to
+     * reconcile instead of hourly. The partner must be verified here and
+     * advertise the subscriptions feature.
+     *
+     * ## OPTIONS
+     *
+     * <domain>
+     * : The partner's domain.
+     *
+     * @param array<int, string> $args
+     * @param array<string, string> $assocArgs
+     */
+    public function subscribe(array $args, array $assocArgs): void
+    {
+        $partner = $this->find($args[0]);
+
+        try {
+            Services::subscriptionClient()->subscribe($partner);
+        } catch (Throwable $exception) {
+            WP_CLI::error($exception->getMessage());
+        }
+
+        WP_CLI::success("Subscribed to pushes from {$partner->domain}. Its changes arrive as they happen; it is still polled daily to reconcile.");
+    }
+
+    /**
+     * Stop receiving a partner's push deliveries and return it to the
+     * hourly poll. The local record is cleared whatever the partner
+     * answers; its acknowledgement is best-effort.
+     *
+     * ## OPTIONS
+     *
+     * <domain>
+     * : The partner's domain.
+     *
+     * @param array<int, string> $args
+     * @param array<string, string> $assocArgs
+     */
+    public function unsubscribe(array $args, array $assocArgs): void
+    {
+        $partner = $this->find($args[0]);
+        $warning = Services::subscriptionClient()->unsubscribe($partner);
+
+        if ($warning !== null) {
+            WP_CLI::warning("The partner did not acknowledge the removal: {$warning}");
+        }
+
+        WP_CLI::success("Unsubscribed from pushes from {$partner->domain}; back on the hourly poll.");
     }
 
     private function reportIntroduction(Partner $partner, PartnerIntroduction $introduction): void

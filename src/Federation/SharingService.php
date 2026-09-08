@@ -53,7 +53,7 @@ final class SharingService
         $refreshed = 0;
 
         foreach ($this->listings->feedPage($partnerId, $partner->sharingScope, null, null, PHP_INT_MAX - 1) as $item) {
-            $this->events->append($item->listing->id, $partnerId, VisibilityEventRepository::REFRESHED, $now);
+            $this->record($item->listing->id, $partnerId, VisibilityEventRepository::REFRESHED, $now);
             $refreshed++;
         }
 
@@ -119,39 +119,14 @@ final class SharingService
         $hidden = 0;
         $revealed = 0;
 
-        $groupMemberIds = [];
+        // Drafts are never distributed (LS-7): audience changes before
+        // first publication need no transitions — no partner ever saw the
+        // listing, so there is nothing to tombstone or resurface.
+        $partners = $listing->status === ListingStatus::Draft ? [] : $this->partners->all();
+        $before = [];
 
-        foreach ($selectedGroupIds as $groupId) {
-            $groupMemberIds = array_merge($groupMemberIds, $this->groups->members($groupId));
-        }
-
-        $visibleAfter = fn (Partner $partner): bool => $audience !== Audience::None
-            && (in_array($partner->id, $selectedPartnerIds, true)
-                || in_array($partner->id, $groupMemberIds, true)
-                || ($audience === Audience::Everyone && $partner->sharingScope === SharingScope::Standard));
-
-        foreach ($this->partners->all() as $partner) {
-            // Drafts are never distributed (LS-7): audience changes before
-            // first publication need no transitions — no partner ever saw
-            // the listing, so there is nothing to tombstone or resurface.
-            if ($listing->status === ListingStatus::Draft) {
-                break;
-            }
-
-            $before = $this->isVisibleTo($listing, $partner);
-            $after = $visibleAfter($partner);
-
-            if ($before === $after) {
-                continue;
-            }
-
-            $this->events->append(
-                $listing->id,
-                $partner->id,
-                $after ? VisibilityEventRepository::VISIBLE : VisibilityEventRepository::HIDDEN,
-                $now,
-            );
-            $after ? $revealed++ : $hidden++;
+        foreach ($partners as $partner) {
+            $before[$partner->id] = $this->isVisibleTo($listing, $partner);
         }
 
         if ($audience !== Audience::None) {
@@ -160,6 +135,27 @@ final class SharingService
         }
 
         $this->listings->update($listing->id, ['audience' => $audience->value]);
+        $updated = $this->listings->find($listing->id) ?? $listing;
+
+        // Apply first, then re-ask the one rule and diff — so the state is
+        // already in place when anything reacting to an event (a push
+        // delivery deriving its payload) reads it, and the after-rule is
+        // never restated here.
+        foreach ($partners as $partner) {
+            $isVisible = $this->isVisibleTo($updated, $partner);
+
+            if ($before[$partner->id] === $isVisible) {
+                continue;
+            }
+
+            $this->record(
+                $listing->id,
+                $partner->id,
+                $isVisible ? VisibilityEventRepository::VISIBLE : VisibilityEventRepository::HIDDEN,
+                $now,
+            );
+            $isVisible ? $revealed++ : $hidden++;
+        }
 
         if ($hidden + $revealed > 0) {
             $this->logger->log(
@@ -169,7 +165,7 @@ final class SharingService
             );
         }
 
-        do_action('openyacht_listing_audience_changed', $this->listings->find($listing->id) ?? $listing, $audience);
+        do_action('openyacht_listing_audience_changed', $updated, $audience);
 
         return ['hidden' => $hidden, 'revealed' => $revealed];
     }
@@ -233,7 +229,7 @@ final class SharingService
                     continue;
                 }
 
-                $this->events->append(
+                $this->record(
                     (int) $listingId,
                     (int) $partnerId,
                     $isVisible ? VisibilityEventRepository::VISIBLE : VisibilityEventRepository::HIDDEN,
@@ -300,7 +296,7 @@ final class SharingService
                 continue;
             }
 
-            $this->events->append(
+            $this->record(
                 (int) $listingId,
                 $partner->id,
                 $isVisible ? VisibilityEventRepository::VISIBLE : VisibilityEventRepository::HIDDEN,
@@ -367,7 +363,7 @@ final class SharingService
                 continue;
             }
 
-            $this->events->append(
+            $this->record(
                 $listing->id,
                 $partner->id,
                 $after ? VisibilityEventRepository::VISIBLE : VisibilityEventRepository::HIDDEN,
@@ -386,6 +382,18 @@ final class SharingService
         }
 
         return ['hidden' => $hidden, 'revealed' => $revealed];
+    }
+
+    /**
+     * The one place a visibility transition is written. Everything that
+     * wrote the state has already run when this appends, so a listener
+     * (a push delivery) can derive the partner's new view at once.
+     */
+    private function record(int $listingId, int $partnerId, string $event, string $occurredAt): void
+    {
+        $this->events->append($listingId, $partnerId, $event, $occurredAt);
+
+        do_action('openyacht_visibility_changed', $listingId, $partnerId, $event);
     }
 
     /**

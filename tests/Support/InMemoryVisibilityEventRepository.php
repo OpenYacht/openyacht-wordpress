@@ -33,4 +33,9 @@ final class InMemoryVisibilityEventRepository implements VisibilityEventReposito
 
         return $latest;
     }
+
+    public function latestFor(int $listingId, int $partnerId): ?array
+    {
+        return $this->latestForPartner($partnerId)[$listingId] ?? null;
+    }
 }

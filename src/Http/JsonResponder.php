@@ -49,10 +49,24 @@ final class JsonResponder
     }
 
     /**
+     * A bodiless success (subscription registered or removed).
+     */
+    public static function noContent(): never
+    {
+        nocache_headers();
+        status_header(204);
+
+        exit;
+    }
+
+    /**
      * @param array<string, mixed> $details
      * @param array<string, string> $headers
+     * @param int|null $status overrides the code's usual HTTP mapping
+     *                         (a 405 carries NOT_FOUND: the envelope's
+     *                         code list has no method-not-allowed entry)
      */
-    public static function error(ErrorCode $code, string $message, array $details = [], array $headers = []): never
+    public static function error(ErrorCode $code, string $message, array $details = [], array $headers = [], ?int $status = null): never
     {
         self::send([
             'error' => [
@@ -64,6 +78,6 @@ final class JsonResponder
                 'request_id' => wp_generate_uuid4(),
                 'time' => gmdate('Y-m-d\TH:i:s\Z'),
             ],
-        ], $code->httpStatus(), $headers);
+        ], $status ?? $code->httpStatus(), $headers);
     }
 }

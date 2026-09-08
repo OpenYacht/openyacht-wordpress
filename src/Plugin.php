@@ -77,6 +77,23 @@ final class Plugin
             wp_schedule_event(time(), 'hourly', SyncRunner::HOOK);
         }
 
+        // Push subscriptions (API-10): deliveries are derived from the two
+        // sources the polled feed keys on — the federation_updated_at write
+        // path (the listing actions) and the visibility event log — queued
+        // for the delivery worker, which derives each payload at send time.
+        $listingChanged = static function (Federation\Listing $listing): void {
+            Services::subscriptionService()->listingChanged($listing);
+        };
+        add_action('openyacht_listing_created', $listingChanged);
+        add_action('openyacht_listing_updated', $listingChanged);
+        add_action('openyacht_listing_transitioned', $listingChanged);
+        add_action('openyacht_visibility_changed', static function (int $listingId, int $partnerId): void {
+            Services::subscriptionService()->visibilityChanged($listingId, $partnerId);
+        }, 10, 2);
+        add_action(PushSchedule::HOOK, static function (): void {
+            Services::pushDeliveryWorker()->drain();
+        });
+
         // Retention: the request/sync log channels grow with every inbound
         // request, so a daily prune keeps the table bounded. Audit channels
         // (partner, keys, sharing) are never pruned.
@@ -94,6 +111,7 @@ final class Plugin
             \WP_CLI::add_command('openyacht partner', Cli\PartnerCommand::class);
             \WP_CLI::add_command('openyacht key', Cli\KeyCommand::class);
             \WP_CLI::add_command('openyacht media', Cli\MediaCommand::class);
+            \WP_CLI::add_command('openyacht push', Cli\PushCommand::class);
             \WP_CLI::add_command('openyacht seed', Cli\SeedCommand::class);
         }
 
@@ -121,6 +139,11 @@ final class Plugin
 
         echo '<div class="notice notice-warning"><p><strong>' . esc_html__('OpenYacht: partner sync is overdue.', 'openyacht') . '</strong> ';
         echo esc_html__('WordPress cron only runs when the site gets visits, and no sync pass has completed recently — synced listings may fall behind the 24-hour freshness obligation. Run "wp openyacht sync" or point a system cron at wp-cron.php.', 'openyacht');
+
+        if (Services::subscriptionService()->offersSubscriptions()) {
+            echo ' ' . esc_html__('Push deliveries to subscribed partners run from the same cron, and retry for at most 24 hours before they are abandoned.', 'openyacht');
+        }
+
         echo '</p></div>';
     }
 }

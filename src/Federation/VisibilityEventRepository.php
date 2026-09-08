@@ -38,4 +38,12 @@ interface VisibilityEventRepository
      * @return array<int, array{event: string, occurred_at: string}> listing id => latest event
      */
     public function latestForPartner(int $partnerId): array;
+
+    /**
+     * The latest event for one (listing, partner) pair — the single-pair
+     * form a push delivery needs.
+     *
+     * @return array{event: string, occurred_at: string}|null
+     */
+    public function latestFor(int $listingId, int $partnerId): ?array;
 }

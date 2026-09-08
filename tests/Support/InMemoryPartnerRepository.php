@@ -107,6 +107,11 @@ final class InMemoryPartnerRepository implements PartnerRepository
             requestMessage: $columns['request_message'] ?? null,
             requestContactEmail: $columns['request_contact_email'] ?? null,
             requestedAt: $columns['requested_at'] ?? null,
+            pushCallbackUrl: $columns['push_callback_url'] ?? null,
+            pushCallbackRegisteredAt: $columns['push_callback_registered_at'] ?? null,
+            pushLastDeliveredAt: $columns['push_last_delivered_at'] ?? null,
+            pushLastFailedAt: $columns['push_last_failed_at'] ?? null,
+            pushSubscribedAt: $columns['push_subscribed_at'] ?? null,
         );
     }
 
@@ -133,6 +138,11 @@ final class InMemoryPartnerRepository implements PartnerRepository
             'request_message' => $partner->requestMessage,
             'request_contact_email' => $partner->requestContactEmail,
             'requested_at' => $partner->requestedAt,
+            'push_callback_url' => $partner->pushCallbackUrl,
+            'push_callback_registered_at' => $partner->pushCallbackRegisteredAt,
+            'push_last_delivered_at' => $partner->pushLastDeliveredAt,
+            'push_last_failed_at' => $partner->pushLastFailedAt,
+            'push_subscribed_at' => $partner->pushSubscribedAt,
         ];
     }
 }

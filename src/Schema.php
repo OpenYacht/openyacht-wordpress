@@ -17,7 +17,7 @@ if (! defined('ABSPATH')) {
  */
 final class Schema
 {
-    public const VERSION = 9;
+    public const VERSION = 10;
 
     public const OPTION = 'openyacht_schema_version';
 
@@ -39,6 +39,7 @@ final class Schema
         'copies',
         'copy_media',
         'visibility_events',
+        'push_deliveries',
         'log',
     ];
 
@@ -176,6 +177,11 @@ final class Schema
   request_message text NULL,
   request_contact_email varchar(255) NULL,
   requested_at datetime NULL,
+  push_callback_url varchar(2000) NULL,
+  push_callback_registered_at datetime NULL,
+  push_last_delivered_at datetime NULL,
+  push_last_failed_at datetime NULL,
+  push_subscribed_at datetime NULL,
   created_at datetime NOT NULL,
   updated_at datetime NOT NULL,
   PRIMARY KEY  (id),
@@ -344,6 +350,22 @@ final class Schema
   PRIMARY KEY  (id),
   KEY partner_time (partner_id,occurred_at),
   KEY listing_id (listing_id)
+) {$collate};";
+
+        $tables['push_deliveries'] = "CREATE TABLE {$this->tableName('push_deliveries')} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  partner_id bigint(20) unsigned NOT NULL,
+  listing_id bigint(20) unsigned NOT NULL,
+  queued_at datetime NOT NULL,
+  changed_at datetime NOT NULL,
+  next_attempt_at datetime NOT NULL,
+  attempts int(10) unsigned NOT NULL DEFAULT 0,
+  last_error text NULL,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  UNIQUE KEY partner_listing (partner_id,listing_id),
+  KEY next_attempt_at (next_attempt_at)
 ) {$collate};";
 
         $tables['log'] = "CREATE TABLE {$this->tableName('log')} (

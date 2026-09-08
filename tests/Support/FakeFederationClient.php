@@ -48,6 +48,16 @@ final class FakeFederationClient implements FederationClient
         return $this->answer('POST', $pathWithQuery, $payload);
     }
 
+    public function delete(Partner $partner, string $pathWithQuery): HttpResponse
+    {
+        return $this->answer('DELETE', $pathWithQuery, null);
+    }
+
+    public function postCallback(string $url, array $payload): HttpResponse
+    {
+        return $this->answer('POST', $url, $payload);
+    }
+
     /**
      * @param array<string, mixed>|null $payload
      */

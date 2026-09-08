@@ -68,6 +68,106 @@ final class SyncServiceTest extends TestCase
         ];
     }
 
+    private function tombstone(string $uuid, string $updatedAt = '2026-08-24T09:00:00Z'): array
+    {
+        return [
+            'id' => "https://authority.example/openyacht/v1/listings/{$uuid}",
+            'tombstone' => true,
+            'status' => 'withdrawn',
+            'updated_at' => $updatedAt,
+        ];
+    }
+
+    #[Group('API-11')]
+    #[Group('ID-3')]
+    public function testAPushedListingIsAppliedLikeAPolledOne(): void
+    {
+        Actions\expectDone('openyacht_copy_created')->once();
+        $partner = $this->partner();
+
+        self::assertSame('created', $this->sync->applyDelivery($partner, $this->listing('aaa', 'OASIS')));
+
+        $copy = $this->copies->findForPartner($partner->id, 'https://authority.example/openyacht/v1/listings/aaa');
+        self::assertSame('OASIS', $copy?->name);
+        self::assertTrue($copy?->signatureVerified);
+    }
+
+    #[Group('API-11')]
+    public function testAReplayedDeliveryIsADuplicateButANewerOneIsAChange(): void
+    {
+        Actions\expectDone('openyacht_copy_created')->once();
+        Actions\expectDone('openyacht_copy_updated')->once();
+        $partner = $this->partner();
+
+        $this->sync->applyDelivery($partner, $this->listing('aaa'));
+        self::assertSame('duplicate', $this->sync->applyDelivery($partner, $this->listing('aaa')));
+
+        $newer = $this->listing('aaa', 'OASIS II');
+        $newer['updated_at'] = '2026-08-23T11:00:00Z';
+        self::assertSame('updated', $this->sync->applyDelivery($partner, $newer));
+        self::assertSame('OASIS II', $this->copies->findForPartner($partner->id, $newer['id'])?->name);
+    }
+
+    #[Group('API-11')]
+    #[Group('ID-7')]
+    public function testATombstoneWithdrawsTheCopyAndItsReplayIsADuplicate(): void
+    {
+        Actions\expectDone('openyacht_copy_created')->once();
+        Actions\expectDone('openyacht_copy_tombstoned')->once();
+        $partner = $this->partner();
+        $this->sync->applyDelivery($partner, $this->listing('aaa'));
+
+        self::assertSame('tombstoned', $this->sync->applyDelivery($partner, $this->tombstone('aaa')));
+        self::assertNotNull($this->copies->findForPartner($partner->id, $this->tombstone('aaa')['id'])?->tombstonedAt);
+        self::assertSame('duplicate', $this->sync->applyDelivery($partner, $this->tombstone('aaa')));
+    }
+
+    #[Group('API-11')]
+    #[Group('API-3')]
+    public function testAReSharedListingArrivingWithItsOriginalUpdatedAtAfterATombstoneIsApplied(): void
+    {
+        // The authority re-shared it: the feed (and so the push) carries
+        // the listing's own updated_at again — the very pair a receipt log
+        // would have recorded before the tombstone. The copy's state, not a
+        // receipt log, decides a repeat.
+        Actions\expectDone('openyacht_copy_created')->once();
+        Actions\expectDone('openyacht_copy_tombstoned')->once();
+        Actions\expectDone('openyacht_copy_updated')->once();
+        $partner = $this->partner();
+        $this->sync->applyDelivery($partner, $this->listing('aaa'));
+        $this->sync->applyDelivery($partner, $this->tombstone('aaa'));
+
+        self::assertSame('updated', $this->sync->applyDelivery($partner, $this->listing('aaa')));
+        self::assertNull($this->copies->findForPartner($partner->id, $this->listing('aaa')['id'])?->tombstonedAt);
+    }
+
+    #[Group('API-11')]
+    public function testAPushSubscribedPartnerIsStillPolledDailyToReconcile(): void
+    {
+        $now = 1_800_000_000;
+        $at = static fn (int $secondsAgo): string => gmdate('Y-m-d H:i:s', $now - $secondsAgo);
+
+        $polled = $this->partner(['domain' => 'polled.example', 'last_ok_at' => $at(2 * 3600)]);
+        $recent = $this->partner(['domain' => 'recent.example', 'push_subscribed_at' => $at(0), 'last_ok_at' => $at(2 * 3600)]);
+        $dayAgo = $this->partner(['domain' => 'day.example', 'push_subscribed_at' => $at(0), 'last_ok_at' => $at(24 * 3600)]);
+        $almostADay = $this->partner(['domain' => 'almost.example', 'push_subscribed_at' => $at(0), 'last_ok_at' => $at(24 * 3600 - 4 * 60)]);
+        $neverPolled = $this->partner(['domain' => 'never.example', 'push_subscribed_at' => $at(0), 'last_ok_at' => null]);
+        $failing = $this->partner([
+            'domain' => 'failing.example',
+            'push_subscribed_at' => $at(0),
+            'last_ok_at' => $at(3 * 86400),
+            'last_attempted_at' => $at(10 * 60),
+            'consecutive_failures' => 2,
+        ]);
+
+        self::assertTrue($this->sync->isDue($polled, $now), 'an unsubscribed partner polls every pass');
+        self::assertFalse($this->sync->isDue($recent, $now), 'subscribed and reconciled two hours ago');
+        self::assertTrue($this->sync->isDue($dayAgo, $now), 'the daily reconciliation is due');
+        self::assertTrue($this->sync->isDue($almostADay, $now), 'a few minutes early still counts as the daily pass');
+        self::assertTrue($this->sync->isDue($neverPolled, $now), 'never reconciled at all');
+        self::assertFalse($this->sync->isDue($failing, $now), 'the failure backoff applies first');
+    }
+
     #[Group('API-2')]
     #[Group('ID-2')]
     #[Group('ID-3')]

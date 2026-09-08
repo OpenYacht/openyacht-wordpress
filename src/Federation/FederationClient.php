@@ -20,4 +20,16 @@ interface FederationClient
      * @param array<string, mixed> $payload
      */
     public function post(Partner $partner, string $pathWithQuery, array $payload): HttpResponse;
+
+    public function delete(Partner $partner, string $pathWithQuery): HttpResponse;
+
+    /**
+     * A signed POST to a partner-registered callback URL rather than a
+     * path on its identity domain: the push delivery (API-10). The
+     * signing string is built from the callback's own host and path, so
+     * the receiver verifies it with the standard procedure.
+     *
+     * @param array<string, mixed> $payload
+     */
+    public function postCallback(string $url, array $payload): HttpResponse;
 }

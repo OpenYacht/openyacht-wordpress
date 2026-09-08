@@ -15,8 +15,7 @@ use DateTimeZone;
  * Builds the node's discovery document served at /.well-known/openyacht.
  *
  * The endpoints map only advertises endpoints this node actually serves;
- * `subscriptions` is added when the optional subscriptions feature is
- * implemented and advertised in capabilities.
+ * `subscriptions` appears when the optional feature is switched on.
  *
  * // federation-protocol.md §Discovery: the well-known endpoint
  */
@@ -49,14 +48,31 @@ final class WellKnownDocument
                 ],
                 $this->keys->publishedKeys(),
             ),
-            'endpoints' => [
-                'listings' => '/openyacht/v1/listings',
-                'partners' => '/openyacht/v1/partners',
-                'health' => '/openyacht/v1/health',
-                'capabilities' => '/openyacht/v1/capabilities',
-            ],
+            'endpoints' => $this->endpoints(),
             'generated_at' => gmdate('Y-m-d\TH:i:s\Z'),
         ];
+    }
+
+    /**
+     * Only endpoints this node actually serves: subscriptions appears
+     * when the optional feature is offered, in step with capabilities.
+     *
+     * @return array<string, string>
+     */
+    private function endpoints(): array
+    {
+        $endpoints = [
+            'listings' => '/openyacht/v1/listings',
+            'partners' => '/openyacht/v1/partners',
+            'health' => '/openyacht/v1/health',
+            'capabilities' => '/openyacht/v1/capabilities',
+        ];
+
+        if ((bool) \OpenYacht\Admin\Settings::get('push_subscriptions')) {
+            $endpoints['subscriptions'] = '/openyacht/v1/subscriptions';
+        }
+
+        return $endpoints;
     }
 
     /**

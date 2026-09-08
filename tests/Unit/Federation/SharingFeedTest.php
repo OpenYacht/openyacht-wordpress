@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OpenYacht\Tests\Unit\Federation;
 
+use Brain\Monkey\Actions;
 use Brain\Monkey\Functions;
 use OpenYacht\Federation\Audience;
 use OpenYacht\Federation\ErrorCode;
@@ -91,6 +92,24 @@ final class SharingFeedTest extends TestCase
         $query = $since !== null ? ['updated_since' => $since] : [];
 
         return $this->endpoint->index($partner, $query)['payload']['data'];
+    }
+
+    public function testAVisibilityEventIsRecordedOnlyAfterTheStateItDescribesIsInPlace(): void
+    {
+        // A listener on the event (a push delivery) derives the partner's
+        // view at once; recording the event before applying the audience
+        // would have it serialise the OLD visibility and push the listing
+        // where a tombstone was owed.
+        $listing = $this->seedListing('ORDERING TEST');
+        $seen = [];
+        Actions\expectDone('openyacht_visibility_changed')->once()->whenHappen(function (int $listingId, int $partnerId, string $event) use (&$seen): void {
+            $partner = $this->partners->find($partnerId);
+            $seen[] = [$partnerId, $event, $this->sharing->isVisibleTo($this->listings->find($listingId), $partner)];
+        });
+
+        $this->sharing->setAudience($listing, Audience::Selected, [$this->partnerB->id]);
+
+        self::assertSame([[$this->partnerA->id, 'hidden', false]], $seen, 'A lost visibility, and the rule already says so when the event fires');
     }
 
     public function testUnshareSurfacesAsAWithdrawnTombstoneOnlyForThatPartner(): void

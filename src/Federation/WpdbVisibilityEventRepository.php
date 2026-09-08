@@ -49,6 +49,17 @@ final class WpdbVisibilityEventRepository implements VisibilityEventRepository
         return $latest;
     }
 
+    public function latestFor(int $listingId, int $partnerId): ?array
+    {
+        $row = $this->wpdb->get_row($this->wpdb->prepare(
+            "SELECT event, occurred_at FROM {$this->table()} WHERE listing_id = %d AND partner_id = %d ORDER BY id DESC LIMIT 1",
+            $listingId,
+            $partnerId,
+        ), 'ARRAY_A');
+
+        return is_array($row) ? ['event' => (string) $row['event'], 'occurred_at' => (string) $row['occurred_at']] : null;
+    }
+
     private function table(): string
     {
         return (new Schema($this->wpdb))->tableName('visibility_events');

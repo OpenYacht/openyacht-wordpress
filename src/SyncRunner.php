@@ -87,6 +87,15 @@ final class SyncRunner
             }
         }
 
+        // Safety net for the push delivery queue: a single event can be
+        // lost with wp-cron, and a retry scheduled hours out is worth
+        // re-checking on the hour anyway.
+        try {
+            Services::pushDeliveryWorker()->drain();
+        } catch (Throwable $exception) {
+            Services::logger()->log('sync', 'Push delivery pass failed: ' . $exception->getMessage(), 'error');
+        }
+
         update_option(self::LAST_RUN_OPTION, gmdate('Y-m-d H:i:s'), false);
 
         return $allOk;

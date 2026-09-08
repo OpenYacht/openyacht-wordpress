@@ -10,6 +10,7 @@ if (! defined('ABSPATH')) {
 
 use OpenYacht\Federation\AudienceRepository;
 use OpenYacht\Federation\BuilderRegistry;
+use OpenYacht\Federation\CapabilitiesClient;
 use OpenYacht\Federation\CategoryVocabulary;
 use OpenYacht\Federation\CopyMediaRepository;
 use OpenYacht\Federation\CopyRepository;
@@ -27,10 +28,14 @@ use OpenYacht\Federation\PartnerGroupRepository;
 use OpenYacht\Federation\PartnerRepository;
 use OpenYacht\Federation\PartnerService;
 use OpenYacht\Federation\PriceHistoryRepository;
+use OpenYacht\Federation\PushDeliveryRepository;
+use OpenYacht\Federation\PushDeliveryWorker;
 use OpenYacht\Federation\RichTextSanitizer;
 use OpenYacht\Federation\SharingService;
 use OpenYacht\Federation\SignedClient;
 use OpenYacht\Federation\Signer;
+use OpenYacht\Federation\SubscriptionClient;
+use OpenYacht\Federation\SubscriptionService;
 use OpenYacht\Federation\SyncService;
 use OpenYacht\Federation\Verifier;
 use OpenYacht\Federation\VisibilityEventRepository;
@@ -47,6 +52,7 @@ use OpenYacht\Federation\WpdbLogReader;
 use OpenYacht\Federation\WpdbPartnerGroupRepository;
 use OpenYacht\Federation\WpdbPartnerRepository;
 use OpenYacht\Federation\WpdbPriceHistoryRepository;
+use OpenYacht\Federation\WpdbPushDeliveryRepository;
 use OpenYacht\Federation\WpdbVisibilityEventRepository;
 use OpenYacht\Media\ImageFetcher;
 use OpenYacht\Media\MediaService;
@@ -215,6 +221,47 @@ final class Services
             new ImageFetcher(),
             new WpRenditionGenerator(),
             self::copyMedia(),
+            self::logger(),
+        );
+    }
+
+    public static function pushDeliveries(): PushDeliveryRepository
+    {
+        return self::$cache[__FUNCTION__] ??= new WpdbPushDeliveryRepository(self::wpdb());
+    }
+
+    public static function subscriptionService(): SubscriptionService
+    {
+        return self::$cache[__FUNCTION__] ??= new SubscriptionService(
+            self::partners(),
+            self::pushDeliveries(),
+            self::sharingService(),
+            self::visibilityEvents(),
+            self::listingSerializer(),
+            self::logger(),
+            scheduleDrain: static fn (int $at) => PushSchedule::drainAt($at),
+        );
+    }
+
+    public static function pushDeliveryWorker(): PushDeliveryWorker
+    {
+        return self::$cache[__FUNCTION__] ??= new PushDeliveryWorker(
+            self::pushDeliveries(),
+            self::partners(),
+            self::listings(),
+            self::subscriptionService(),
+            self::signedClient(),
+            self::logger(),
+            static fn (int $at) => PushSchedule::drainAt($at),
+        );
+    }
+
+    public static function subscriptionClient(): SubscriptionClient
+    {
+        return self::$cache[__FUNCTION__] ??= new SubscriptionClient(
+            self::signedClient(),
+            self::partners(),
+            new CapabilitiesClient(),
             self::logger(),
         );
     }

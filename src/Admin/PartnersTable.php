@@ -73,6 +73,15 @@ final class PartnersTable extends \WP_List_Table
 
         $actions['refresh'] = $this->actionButton($item, 'refresh', __('Refresh keys', 'openyacht'));
 
+        // Optional push layer (API-11): receive the partner's changes as
+        // they happen instead of on the hourly poll. Verified only — the
+        // inbox refuses anyone else, like the feed.
+        if ($item->trustLevel === TrustLevel::Verified) {
+            $actions['pushes'] = $item->isPushSubscribed()
+                ? $this->actionButton($item, 'unsubscribe', __('Unsubscribe from pushes', 'openyacht'))
+                : $this->actionButton($item, 'subscribe', __('Subscribe to pushes', 'openyacht'));
+        }
+
         // Lifecycle step 1, on demand: a partner added before the sender
         // existed, or one whose administrators need asking again.
         if ($item->trustLevel !== TrustLevel::Blocked) {
@@ -114,6 +123,26 @@ final class PartnersTable extends \WP_List_Table
         if ($item->requestSentAt !== null) {
             /* translators: %s: UTC datetime the partnership request reached the partner. */
             $notes .= '<br><span class="description">' . esc_html(sprintf(__('Partnership request sent %s UTC', 'openyacht'), $item->requestSentAt)) . '</span>';
+        }
+
+        if ($item->pushSubscribedAt !== null) {
+            /* translators: %s: UTC datetime this node subscribed to the partner's pushes. */
+            $notes .= '<br><span class="description">' . esc_html(sprintf(__('Receiving its pushes since %s UTC; polled daily to reconcile', 'openyacht'), $item->pushSubscribedAt)) . '</span>';
+        }
+
+        if ($item->pushCallbackUrl !== null) {
+            $delivery = $item->pushLastDeliveredAt !== null
+                /* translators: %s: UTC datetime of the last successful push delivery to the partner. */
+                ? sprintf(__('last delivered %s UTC', 'openyacht'), $item->pushLastDeliveredAt)
+                : __('nothing delivered yet', 'openyacht');
+
+            if ($item->pushLastFailedAt !== null && $item->pushLastFailedAt > (string) $item->pushLastDeliveredAt) {
+                /* translators: %s: UTC datetime of the last failed push delivery to the partner. */
+                $delivery .= ', ' . sprintf(__('last failed %s UTC', 'openyacht'), $item->pushLastFailedAt);
+            }
+
+            /* translators: 1: the partner's callback URL, 2: delivery status text. */
+            $notes .= '<br><span class="description">' . esc_html(sprintf(__('Pushing changes to %1$s (%2$s)', 'openyacht'), $item->pushCallbackUrl, $delivery)) . '</span>';
         }
 
         return '<strong>' . esc_html($item->domain) . '</strong>' . $notes . $this->receivedRequest($item) . $this->row_actions($actions);

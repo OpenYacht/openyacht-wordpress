@@ -95,6 +95,7 @@ final class WpdbPartnerRepository implements PartnerRepository
         $this->wpdb->delete($this->table(), ['id' => $id]);
         $this->wpdb->delete($schema->tableName('listing_audience'), ['partner_id' => $id]);
         $this->wpdb->delete($schema->tableName('partner_group_members'), ['partner_id' => $id]);
+        $this->wpdb->delete($schema->tableName('push_deliveries'), ['partner_id' => $id]);
         // The visibility log is append-only by design and carries no
         // foreign key, so its rows go explicitly.
         $this->wpdb->delete($schema->tableName('visibility_events'), ['partner_id' => $id]);
@@ -154,6 +155,11 @@ final class WpdbPartnerRepository implements PartnerRepository
             requestMessage: isset($row['request_message']) && $row['request_message'] !== '' ? (string) $row['request_message'] : null,
             requestContactEmail: isset($row['request_contact_email']) && $row['request_contact_email'] !== '' ? (string) $row['request_contact_email'] : null,
             requestedAt: $row['requested_at'] ?? null,
+            pushCallbackUrl: isset($row['push_callback_url']) && $row['push_callback_url'] !== '' ? (string) $row['push_callback_url'] : null,
+            pushCallbackRegisteredAt: $row['push_callback_registered_at'] ?? null,
+            pushLastDeliveredAt: $row['push_last_delivered_at'] ?? null,
+            pushLastFailedAt: $row['push_last_failed_at'] ?? null,
+            pushSubscribedAt: $row['push_subscribed_at'] ?? null,
         );
     }
 

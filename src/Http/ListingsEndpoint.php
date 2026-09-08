@@ -80,22 +80,10 @@ final class ListingsEndpoint
 
         return [
             'payload' => [
+                // One decision, two transports: a push delivery makes the
+                // same call for a single pair (SubscriptionService).
                 'data' => array_map(
-                    function (FeedItem $item) use ($partner): array {
-                        if (! $item->visible) {
-                            // Unshared: a tombstone indistinguishable from a
-                            // real withdrawal, timestamped at the transition.
-                            return $this->serializer->tombstone(
-                                $item->listing,
-                                $item->listing->isTerminal() ? null : ListingStatus::Withdrawn->value,
-                                $item->effectiveUpdatedAt,
-                            );
-                        }
-
-                        return $item->listing->isTerminal()
-                            ? $this->serializer->tombstone($item->listing)
-                            : $this->serializer->serialize($item->listing, $partner);
-                    },
+                    fn (FeedItem $item): array => $this->serializer->feedItem($item, $partner),
                     $page,
                 ),
                 'meta' => $meta,

@@ -29,6 +29,19 @@ final class WellKnownDocumentTest extends TestCase
         });
     }
 
+    public function testTheSubscriptionsEndpointIsAdvertisedOnlyWhenTheFeatureIsOffered(): void
+    {
+        self::assertArrayNotHasKey('subscriptions', $this->document()['endpoints'], 'off by default: wp-cron is no delivery worker');
+
+        Functions\when('get_option')->alias(static fn (string $name, $fallback = false) => match ($name) {
+            'openyacht_node_uuid' => 'c6d45cc6-dd45-4f8f-b588-53738473a183',
+            'openyacht_settings' => ['node_name' => 'Test Node', 'push_subscriptions' => true],
+            default => $fallback,
+        });
+
+        self::assertSame('/openyacht/v1/subscriptions', $this->document()['endpoints']['subscriptions']);
+    }
+
     private function document(): array
     {
         $repository = new InMemoryKeyRepository();

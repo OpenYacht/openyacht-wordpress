@@ -55,6 +55,20 @@ final class SchemaTest extends TestCase
         self::assertStringContainsString('requested_at datetime NULL', $partners);
     }
 
+    public function testPushSubscriptionsHaveTheirColumnsAndQueue(): void
+    {
+        $tables = (new Schema($this->wpdb))->tables();
+
+        foreach (['push_callback_url', 'push_callback_registered_at', 'push_last_delivered_at', 'push_last_failed_at', 'push_subscribed_at'] as $column) {
+            self::assertStringContainsString($column, $tables['partners']);
+        }
+
+        // One live delivery per (partner, listing): the unique key is what
+        // folds a burst of edits into one row.
+        self::assertStringContainsString('UNIQUE KEY partner_listing (partner_id,listing_id)', $tables['push_deliveries']);
+        self::assertStringContainsString('KEY next_attempt_at (next_attempt_at)', $tables['push_deliveries']);
+    }
+
     public function testJsonColumnsAreLongtext(): void
     {
         $tables = (new Schema($this->wpdb))->tables();
