@@ -8,6 +8,8 @@ if (! defined('ABSPATH')) {
     exit;
 }
 
+use OpenYacht\Federation\BuilderRegistry;
+
 /**
  * Owns every plugin table definition and the versioned migration runner.
  *
@@ -17,7 +19,7 @@ if (! defined('ABSPATH')) {
  */
 final class Schema
 {
-    public const VERSION = 10;
+    public const VERSION = 11;
 
     public const OPTION = 'openyacht_schema_version';
 
@@ -43,8 +45,10 @@ final class Schema
         'log',
     ];
 
-    public function __construct(private readonly \wpdb $wpdb)
-    {
+    public function __construct(
+        private readonly \wpdb $wpdb,
+        private ?BuilderRegistry $builders = null,
+    ) {
     }
 
     public function maybeUpgrade(): void
@@ -63,6 +67,10 @@ final class Schema
 
         if ($from > 0 && $from < 7) {
             $this->stampListingsWithGalleryOrLayoutMedia();
+        }
+
+        if ($from > 0 && $from < 11) {
+            $this->dropRetiredBuilderSlugs();
         }
     }
 
@@ -112,6 +120,43 @@ final class Schema
             "UPDATE {$listings} l SET l.federation_updated_at = %s WHERE EXISTS (SELECT 1 FROM {$media} m WHERE m.listing_id = l.id AND m.kind IN ('gallery', 'layout'))",
             gmdate('Y-m-d H:i:s'),
         ));
+    }
+
+    /**
+     * v11 data migration: builder registry 2026.10.0 retired 22 entries that
+     * never identified a single real builder. A non-null slug on the wire
+     * is a claim of registry membership (LS-11), so a listing still
+     * carrying a retired one is reshaped the way the spec tells a consumer
+     * to treat an unknown slug (LS-12): name kept, slug null. That changes
+     * the wire representation, so the row is stamped for re-delivery per
+     * the v7 rule. Registry-generic: any slug the vendored copy no longer
+     * knows is dropped, so a future retirement needs no new migration.
+     */
+    private function dropRetiredBuilderSlugs(): void
+    {
+        $table = $this->tableName('listings');
+        $rows = $this->wpdb->get_results(
+            "SELECT id, builder_slug FROM {$table} WHERE builder_slug IS NOT NULL",
+            'ARRAY_A',
+        );
+
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            $slug = $row['builder_slug'] ?? null;
+
+            if (! is_string($slug) || $slug === '') {
+                continue;
+            }
+
+            $this->builders ??= new BuilderRegistry();
+
+            if (! $this->builders->has($slug)) {
+                $this->wpdb->update(
+                    $table,
+                    ['builder_slug' => null, 'federation_updated_at' => gmdate('Y-m-d H:i:s')],
+                    ['id' => (int) $row['id']],
+                );
+            }
+        }
     }
 
     public function install(): void

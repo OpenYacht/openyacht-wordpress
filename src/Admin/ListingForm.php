@@ -179,11 +179,13 @@ final class ListingForm
                         <div class="mt-5 grid grid-cols-12 gap-x-5 gap-y-5">
                             <div class="col-span-6 max-[900px]:col-span-12">
                                 <label class="oy-label" for="oy_builder"><?php esc_html_e('Builder', 'openyacht'); ?></label>
-                                <?php $this->builderCombobox($v('builder_slug', $listing?->builderSlug)); ?>
+                                <?php $slugKnown = $listing?->builderSlug !== null && (new BuilderRegistry())->has($listing->builderSlug); ?>
+                                <?php $builderSlug = $v('builder_slug', $slugKnown ? $listing?->builderSlug : null); ?>
+                                <?php $this->builderCombobox($builderSlug); ?>
                                 <p class="oy-help"><?php esc_html_e('Search the shared registry. Registry builders travel with their slug; anything else goes in the unlisted field.', 'openyacht'); ?></p>
-                                <div class="mt-3" data-oy-unlisted-builder <?php echo $v('builder_slug', $listing?->builderSlug) !== '' ? 'hidden' : ''; ?>>
+                                <div class="mt-3" data-oy-unlisted-builder <?php echo $builderSlug !== '' ? 'hidden' : ''; ?>>
                                     <label class="oy-label" for="oy_builder_name"><?php esc_html_e('Unlisted builder', 'openyacht'); ?></label>
-                                    <input class="oy-input" name="oy[builder_name]" id="oy_builder_name" type="text" placeholder="<?php esc_attr_e('Only for builders the registry does not list', 'openyacht'); ?>" value="<?php echo esc_attr($v('builder_name', $listing?->builderSlug !== null ? null : $listing?->builderName)); ?>">
+                                    <input class="oy-input" name="oy[builder_name]" id="oy_builder_name" type="text" placeholder="<?php esc_attr_e('Only for builders the registry does not list', 'openyacht'); ?>" value="<?php echo esc_attr($v('builder_name', $slugKnown ? null : $listing?->builderName)); ?>">
                                 </div>
                             </div>
                             <div class="col-span-6 max-[900px]:col-span-12">
@@ -478,6 +480,12 @@ final class ListingForm
         <?php
     }
 
+    /**
+     * The caller passes '' for a stored slug the registry no longer knows
+     * (a retired entry), so the listing renders as an unlisted builder
+     * with its name and a save keeps the name with slug null (LS-12)
+     * instead of silently dropping the builder.
+     */
     private function builderCombobox(string $currentSlug): void
     {
         $options = [['value' => '', 'label' => __('— Unlisted builder —', 'openyacht'), 'hint' => '']];
@@ -877,10 +885,16 @@ final class ListingForm
             ? (string) $input[$key]
             : null;
 
+        // The registry is the authority on a slug: one it does not know
+        // (a retired entry on a stale form) falls back to the free text
+        // with slug null rather than reaching the wire or losing the name.
         $builderSlug = $text('builder_slug');
-        $builderName = $builderSlug !== null
-            ? (new BuilderRegistry())->canonicalName($builderSlug)
-            : $text('builder_name');
+        $builderName = $builderSlug !== null ? (new BuilderRegistry())->canonicalName($builderSlug) : null;
+
+        if ($builderName === null) {
+            $builderSlug = null;
+            $builderName = $text('builder_name');
+        }
 
         $previousNames = array_values(array_filter(array_map(
             static fn (string $name): string => trim($name),

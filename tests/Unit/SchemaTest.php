@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OpenYacht\Tests\Unit;
 
 use Brain\Monkey\Functions;
+use OpenYacht\Federation\BuilderRegistry;
 use OpenYacht\Schema;
 
 final class SchemaTest extends TestCase
@@ -153,6 +154,28 @@ final class SchemaTest extends TestCase
         $stamps = $this->stampQueries();
         self::assertCount(1, $stamps);
         self::assertStringContainsString("m.kind IN ('gallery', 'layout')", $stamps[0], 'only listings whose wire representation changed are re-delivered');
+    }
+
+    public function testUpgradeToV11DropsBuilderSlugsTheRegistryRetired(): void
+    {
+        $GLOBALS['openyacht_dbdelta_calls'] = [];
+
+        Functions\expect('get_option')->once()->with(Schema::OPTION, 0)->andReturn(10);
+        Functions\expect('update_option')->once()->andReturn(true);
+
+        $this->wpdb->results = [
+            ['id' => 1, 'builder_slug' => 'feadship'],
+            ['id' => 2, 'builder_slug' => 'blackwater'],
+        ];
+
+        $registry = new BuilderRegistry(dirname(__DIR__, 2) . '/resources/registry/builders.json');
+        (new Schema($this->wpdb, $registry))->maybeUpgrade();
+
+        self::assertCount(1, $this->wpdb->updated, 'only the retired slug is touched');
+        self::assertSame('wp_openyacht_listings', $this->wpdb->updated[0]['table']);
+        self::assertSame(['id' => 2], $this->wpdb->updated[0]['where']);
+        self::assertNull($this->wpdb->updated[0]['data']['builder_slug'], 'name kept, slug dropped (LS-12)');
+        self::assertArrayHasKey('federation_updated_at', $this->wpdb->updated[0]['data'], 'wire shape changed, so the listing is re-delivered');
     }
 
     /**
