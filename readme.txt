@@ -4,7 +4,7 @@ Tags: yacht, listings, federation, brokerage, charter
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.7.0
+Stable tag: 0.7.1
 License: AGPL-3.0-only
 License URI: https://www.gnu.org/licenses/agpl-3.0.html
 
@@ -57,6 +57,15 @@ Multisite is not a supported configuration. A node's identity is one domain with
 No. New listings are created as drafts, publishing is an explicit transition, and every listing carries its own audience setting. Partnering with a node carries no obligation to import anything from it either.
 
 == Changelog ==
+
+= 0.7.1 =
+
+Builder registry 2026.10.0. Schema v11 is a data migration only, no new tables or columns; the wire changes only for listings that carried one of the retired slugs.
+
+* Vendored builder registry updated to 2026.10.0, the protocol's curation pass. 22 entries that never identified a single real builder (ambiguous one-word names, model and brand names, feed artefacts) are retired: Blackwater, Bluewater, CH Marine, Concept, Eclipse, Fishing Raptor, Grand Alaskan, Heritage East, Marlago, Mediterranean, Northstar, Parker, Real, Reef Runner, Saga, SES Yachts, Shearwater, Strike, Topaz, Triton, Ultra-Lite Tenders and Vision. The five specific yards two of them conflated are added: Parker Marine, Parker Poland, Saga Boats, Saga Marine and Triton Boats. The country is filled or corrected on 190 entries under the rule the registry now records: the brand's principal office, never where the hull was built. The builder picker shows the new list and country hints.
+* Own listings still carrying a retired slug keep their builder name and drop the slug, the same fallback the spec asks of a consumer meeting an unknown slug, and are stamped for re-delivery so partners pick the change up on their next poll. The migration is registry-generic, so a future retirement needs no new one.
+* The edit form shows a listing whose stored slug the registry no longer knows as an unlisted builder with its name filled in, and saving keeps the name with no slug instead of silently dropping the builder.
+* Synced copies are stored as received and are not checked against the registry, so nothing is rejected on sync.
 
 = 0.7.0 =
 
