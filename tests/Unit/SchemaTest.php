@@ -165,7 +165,9 @@ final class SchemaTest extends TestCase
 
         $this->wpdb->results = [
             ['id' => 1, 'builder_slug' => 'feadship'],
-            ['id' => 2, 'builder_slug' => 'blackwater'],
+            // A synthetic slug, not a real retirement: registry 2026.10.1
+            // restored `blackwater`, which this test used to rely on.
+            ['id' => 2, 'builder_slug' => 'not-a-registry-builder'],
         ];
 
         $registry = new BuilderRegistry(dirname(__DIR__, 2) . '/resources/registry/builders.json');
