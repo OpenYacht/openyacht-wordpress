@@ -4,7 +4,7 @@ Tags: yacht, listings, federation, brokerage, charter
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.7.1
+Stable tag: 0.7.2
 License: AGPL-3.0-only
 License URI: https://www.gnu.org/licenses/agpl-3.0.html
 
@@ -57,6 +57,13 @@ Multisite is not a supported configuration. A node's identity is one domain with
 No. New listings are created as drafts, publishing is an explicit transition, and every listing carries its own audience setting. Partnering with a node carries no obligation to import anything from it either.
 
 == Changelog ==
+
+= 0.7.2 =
+
+Builder registry 2026.11.1, bringing the plugin's copy in line with the protocol and the reference app. No database or wire change; upgrading is a straight plugin update.
+
+* Vendored builder registry updated from 2026.10.0 to 2026.11.1, growing it from 364 to 531 builders. 166 yards are added, mostly large-yacht and European builders the list had not yet covered (for example Perini Navi, Royal Huisman, Rossinavi, Tankoa, Couach, Moonen and Mochi Craft). Nothing is removed or renamed. The builder picker offers the new yards and incoming payloads carrying their slugs now validate; existing listings are untouched until next saved.
+* BlackWater is restored under its original `blackwater` slug. Retiring it in 2026.10.0 was a mistake: it is BlackWater Boats, a Florida builder of sportfish and center-console boats. A listing that lost the slug in the 0.7.1 migration kept its builder name and is not re-linked automatically; pick BlackWater in the builder field and save to restore the slug.
 
 = 0.7.1 =
 
